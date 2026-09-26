@@ -4,7 +4,9 @@ const State = {
   catalog: null,
   listings: [],
   onlinePlayers: [],
-  chatMessages: []
+  chatMessages: [],
+  social: { friends: [], incoming: [], outgoing: [], offers: [], partyInvites: [] },
+  party: null
 };
 
 function getTierInfo(player) {

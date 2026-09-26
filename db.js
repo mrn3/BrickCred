@@ -34,6 +34,14 @@ sql.exec(`
     data TEXT NOT NULL,
     position INTEGER NOT NULL
   );
+  CREATE TABLE IF NOT EXISTS messages (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    from_id TEXT NOT NULL,
+    to_id TEXT NOT NULL,
+    body TEXT NOT NULL,
+    created_at INTEGER NOT NULL
+  );
+  CREATE INDEX IF NOT EXISTS messages_pair ON messages (from_id, to_id, id);
 `);
 
 const stmts = {
@@ -51,7 +59,11 @@ const stmts = {
   insertSession: sql.prepare('INSERT INTO sessions (token_hash, user_id, expires_at) VALUES (?, ?, ?)'),
   sessionUser: sql.prepare('SELECT user_id FROM sessions WHERE token_hash = ? AND expires_at > ?'),
   deleteSession: sql.prepare('DELETE FROM sessions WHERE token_hash = ?'),
-  purgeSessions: sql.prepare('DELETE FROM sessions WHERE expires_at <= ?')
+  purgeSessions: sql.prepare('DELETE FROM sessions WHERE expires_at <= ?'),
+  insertMessage: sql.prepare('INSERT INTO messages (from_id, to_id, body, created_at) VALUES (?, ?, ?, ?)'),
+  conversation: sql.prepare(`SELECT id, from_id AS fromId, to_id AS toId, body, created_at AS at FROM messages
+    WHERE (from_id = @a AND to_id = @b) OR (from_id = @b AND to_id = @a)
+    ORDER BY id DESC LIMIT 60`)
 };
 
 const savePlayers = sql.transaction(players => {
@@ -105,5 +117,11 @@ module.exports = {
   createUser: user => stmts.insertUser.run({ username: null, password_hash: null, google_sub: null, email: null, created_at: Date.now(), ...user }),
   createSession: (tokenHash, userId, expiresAt) => stmts.insertSession.run(tokenHash, userId, expiresAt),
   getSessionUserId: tokenHash => stmts.sessionUser.get(tokenHash, Date.now())?.user_id || null,
-  deleteSession: tokenHash => stmts.deleteSession.run(tokenHash)
+  deleteSession: tokenHash => stmts.deleteSession.run(tokenHash),
+  addMessage: (fromId, toId, body) => {
+    const at = Date.now();
+    const { lastInsertRowid } = stmts.insertMessage.run(fromId, toId, body, at);
+    return { id: Number(lastInsertRowid), fromId, toId, body, at };
+  },
+  getConversation: (a, b) => stmts.conversation.all({ a, b }).reverse()
 };

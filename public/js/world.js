@@ -10,6 +10,8 @@ const World = (() => {
   let phase = 0;
   let lastMoveSent = 0;
   const keys = {};
+  // Smoothed on-screen state for other players, keyed by player id.
+  const remote = new Map();
 
   function init() {
     canvas = document.getElementById('worldCanvas');
@@ -21,9 +23,44 @@ const World = (() => {
       keys[e.key.toLowerCase()] = true;
     });
     window.addEventListener('keyup', e => { keys[e.key.toLowerCase()] = false; });
+    window.addEventListener('blur', () => Object.keys(keys).forEach(k => { keys[k] = false; }));
+    canvas.addEventListener('click', onCanvasClick);
+    canvas.addEventListener('mousemove', e => {
+      canvas.style.cursor = playerAt(e) ? 'pointer' : 'default';
+    });
     document.getElementById('placeHomeBtn').addEventListener('click', placeHome);
     document.getElementById('worldChatForm').addEventListener('submit', sendChat);
     requestAnimationFrame(loop);
+  }
+
+  function canvasPoint(e) {
+    const r = canvas.getBoundingClientRect();
+    return { x: (e.clientX - r.left) * (canvas.width / r.width), y: (e.clientY - r.top) * (canvas.height / r.height) };
+  }
+
+  function playerAt(e) {
+    const { x, y } = canvasPoint(e);
+    for (const [id, r] of remote) {
+      const sx = r.x - cameraX, sy = r.y - cameraY;
+      if (Math.abs(x - sx) < 35 && y > sy - 75 && y < sy + 80) return id;
+    }
+    return null;
+  }
+
+  function onCanvasClick(e) {
+    const id = playerAt(e);
+    if (id) Social.openPlayerMenu(id, e.clientX, e.clientY);
+    else document.getElementById('playerMenu').classList.add('hidden');
+  }
+
+  function goTo(x, y) {
+    px = Math.min(WORLD_WIDTH - PLAYER_MARGIN, Math.max(PLAYER_MARGIN, x + 120));
+    py = Math.min(WORLD_HEIGHT - PLAYER_MARGIN, Math.max(PLAYER_MARGIN, y));
+    State.player.world.x = px;
+    State.player.world.y = py;
+    Net.moveWorld(px, py);
+    UI.showTab('world');
+    UI.renderOnlinePlayers();
   }
 
   function isTyping(el) {
@@ -67,6 +104,27 @@ const World = (() => {
     } else {
       phase = 0;
     }
+    updateRemote();
+  }
+
+  function updateRemote() {
+    const seen = new Set();
+    State.onlinePlayers.forEach(p => {
+      if (p.id === State.playerId || !p.world) return;
+      seen.add(p.id);
+      let r = remote.get(p.id);
+      if (!r) {
+        r = { x: p.world.x, y: p.world.y, facing: 1, phase: 0, moving: false };
+        remote.set(p.id, r);
+      }
+      const dx = p.world.x - r.x, dy = p.world.y - r.y;
+      r.moving = Math.hypot(dx, dy) > 1.5;
+      if (Math.abs(dx) > 1) r.facing = dx > 0 ? 1 : -1;
+      r.x += dx * 0.2;
+      r.y += dy * 0.2;
+      r.phase = r.moving ? r.phase + 0.25 : 0;
+    });
+    for (const id of remote.keys()) if (!seen.has(id)) remote.delete(id);
   }
 
   function drawGround() {
@@ -113,8 +171,10 @@ const World = (() => {
   }
 
   function drawPlayer(player, isLocal) {
-    const worldX = isLocal ? px : player.world.x;
-    const worldY = isLocal ? py : player.world.y;
+    const r = isLocal ? null : remote.get(player.id);
+    if (!isLocal && !r) return;
+    const worldX = isLocal ? px : r.x;
+    const worldY = isLocal ? py : r.y;
     const x = worldX - cameraX;
     const y = worldY - cameraY;
     if (player.vehicle) {
@@ -122,22 +182,64 @@ const World = (() => {
       if (vehicleImg) ctx.drawImage(vehicleImg, x - 70, y - 40, 140, 140);
     }
     const tier = getTierInfo(player);
+    const friend = !isLocal && Social.isFriend(player.id);
+    if (friend) {
+      ctx.fillStyle = 'rgba(250,204,21,0.35)';
+      ctx.beginPath();
+      ctx.ellipse(x, y + 74, 30, 9, 0, 0, Math.PI * 2);
+      ctx.fill();
+    }
     drawMinifig(ctx, x, y, {
       scale: 1.4,
-      walkPhase: isLocal ? phase : 0,
+      walkPhase: isLocal ? phase : r.phase,
       bodyColor: tier.bodyColor,
       legColor: tier.legColor,
       glow: tier.glow,
-      facing: isLocal ? facing : 1,
+      facing: isLocal ? facing : r.facing,
       weapon: isLocal && (State.player.equipped.weapons || []).length > 0,
       cape: tier.id >= 4
     });
-    ctx.fillStyle = '#1e293b';
-    ctx.font = '14px sans-serif';
+    ctx.fillStyle = isLocal ? '#1e293b' : friend ? '#92400e' : '#1e3a8a';
+    ctx.font = isLocal ? '14px sans-serif' : 'bold 14px sans-serif';
     ctx.textAlign = 'center';
-    ctx.fillText(`${player.name} · ${tier.name}`, x, y - 60);
+    ctx.fillText(`${friend ? '★ ' : ''}${player.name} · ${tier.name}`, x, y - 60);
     const chat = [...State.chatMessages].reverse().find(m => m.id === player.id && Date.now() - m.receivedAt < 6000);
     if (chat) drawBubble(chat.message, x, y - 82);
+  }
+
+  // Arrows at the screen edge pointing to players outside the view.
+  function drawOffscreenMarkers() {
+    const cx = canvas.width / 2, cy = canvas.height / 2;
+    for (const [id, r] of remote) {
+      const sx = r.x - cameraX, sy = r.y - cameraY;
+      if (sx > -20 && sx < canvas.width + 20 && sy > -60 && sy < canvas.height + 40) continue;
+      const player = State.onlinePlayers.find(p => p.id === id);
+      if (!player) continue;
+      const angle = Math.atan2(sy - cy, sx - cx);
+      const scale = Math.min((cx - 30) / Math.abs(Math.cos(angle) || 1e-6), (cy - 24) / Math.abs(Math.sin(angle) || 1e-6));
+      const ax = cx + Math.cos(angle) * scale, ay = cy + Math.sin(angle) * scale;
+      ctx.save();
+      ctx.translate(ax, ay);
+      ctx.rotate(angle);
+      ctx.fillStyle = Social.isFriend(id) ? '#f59e0b' : '#2563eb';
+      ctx.beginPath();
+      ctx.moveTo(14, 0);
+      ctx.lineTo(-8, -9);
+      ctx.lineTo(-8, 9);
+      ctx.closePath();
+      ctx.fill();
+      ctx.restore();
+      const dist = Math.round(Math.hypot(r.x - px, r.y - py));
+      ctx.font = 'bold 11px sans-serif';
+      ctx.textAlign = 'center';
+      const label = `${player.name} ${dist}m`;
+      const lx = Math.min(canvas.width - 50, Math.max(50, ax - Math.cos(angle) * 30));
+      const ly = Math.min(canvas.height - 8, Math.max(14, ay - Math.sin(angle) * 22));
+      ctx.fillStyle = 'rgba(255,255,255,0.85)';
+      ctx.fillRect(lx - ctx.measureText(label).width / 2 - 4, ly - 11, ctx.measureText(label).width + 8, 15);
+      ctx.fillStyle = '#111827';
+      ctx.fillText(label, lx, ly);
+    }
   }
 
   function render() {
@@ -155,6 +257,7 @@ const World = (() => {
       .filter(player => player.id !== State.playerId && player.world)
       .forEach(player => drawPlayer(player, false));
     drawPlayer(localPlayer, true);
+    drawOffscreenMarkers();
   }
 
   function placeHome() {
@@ -202,5 +305,5 @@ const World = (() => {
     requestAnimationFrame(loop);
   }
 
-  return { init, renderChat };
+  return { init, renderChat, goTo };
 })();

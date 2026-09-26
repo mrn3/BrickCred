@@ -25,6 +25,7 @@ document.addEventListener('DOMContentLoaded', () => {
       BuildStudio.init();
       Home.init();
       Battle.init();
+      Social.init();
       UI.initMarketControls();
       UI.renderAll();
       startHomeIncome();

@@ -6,6 +6,7 @@ const http = require('http');
 const { Server } = require('socket.io');
 const { OAuth2Client } = require('google-auth-library');
 const store = require('./db');
+const attachSocial = require('./social');
 
 const app = express();
 const server = http.createServer(app);
@@ -209,6 +210,9 @@ function newPlayer(id, name) {
     vehicleBuildId: null,
     world: { x: 400, y: 300, homeX: 125, homeY: 155 },
     hunt: { level: 1, runCred: 0, inFight: false },
+    friends: [],
+    friendRequests: [],
+    sentRequests: [],
     online: true
   };
 }
@@ -263,6 +267,8 @@ function findSocketByPlayerId(id) {
   return null;
 }
 
+const social = attachSocial({ io, db, store, catalog, weaponById, powerupById, scheduleSave, publicPlayer, releaseBuild });
+
 io.use((socket, next) => {
   const userId = sessionUserId(socket.handshake.headers.cookie);
   if (!userId || !db.players[userId]) return next(new Error('unauthorized'));
@@ -278,6 +284,7 @@ io.on('connection', socket => {
     socket.currentPlayerId = id;
     db.players[id].online = true;
     socket.join('lobby');
+    socket.join('player:' + id);
 
     socket.emit('joined', {
       player: publicPlayer(db.players[id]),
@@ -286,7 +293,10 @@ io.on('connection', socket => {
     });
 
     io.to('lobby').emit('onlinePlayers', onlineList());
+    social.onJoin(id);
   });
+
+  social.register(socket);
 
   // Client is trusted for its own solo progress (store gear, equip loadout,
   // built creations); only trade actions below are server-validated.
@@ -303,11 +313,13 @@ io.on('connection', socket => {
     if (patch.hunt && typeof patch.hunt === 'object') {
       const level = Math.round(Number(patch.hunt.level));
       const runCred = Math.round(Number(patch.hunt.runCred));
+      const before = p.hunt && p.hunt.level;
       p.hunt = {
         level: Number.isFinite(level) ? Math.min(50, Math.max(1, level)) : 1,
         runCred: Number.isFinite(runCred) ? Math.max(0, runCred) : 0,
         inFight: patch.hunt.inFight === true
       };
+      if (p.hunt.level !== before) social.onHuntChanged(p.id);
     }
     scheduleSave([p.id]);
   });
@@ -451,6 +463,7 @@ io.on('connection', socket => {
     if (id && db.players[id] && !findSocketByPlayerId(id)) {
       db.players[id].online = false;
       io.to('lobby').emit('onlinePlayers', onlineList());
+      social.onOffline(id);
     }
   });
 });

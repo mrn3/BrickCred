@@ -3,18 +3,27 @@ const Net = (() => {
 
   function init(onReady) {
     socket = io();
-    socket.emit('join');
+    let ready = false;
+
+    // Re-join after every reconnect (e.g. a server restart), otherwise the
+    // server forgets who this socket is and other players stop seeing us.
+    socket.on('connect', () => socket.emit('join'));
 
     socket.on('connect_error', err => {
       if (err && err.message === 'unauthorized') window.location.reload();
     });
 
-    socket.once('joined', data => {
+    socket.on('joined', data => {
       State.player = normalizePlayer(data.player);
       State.playerId = data.player.id;
       State.catalog = data.catalog;
       State.listings = data.listings;
-      onReady();
+      if (!ready) {
+        ready = true;
+        onReady();
+      } else {
+        UI.renderAll();
+      }
     });
 
     socket.on('playerUpdated', p => {
@@ -50,6 +59,26 @@ const Net = (() => {
     socket.on('actionError', data => {
       UI.toast(data.message);
     });
+
+    socket.on('notice', data => UI.toast(data.message));
+
+    socket.on('social', data => {
+      State.social = data;
+      if (State.player) Social.render();
+    });
+
+    socket.on('dm', msg => Social.onDm(msg));
+
+    socket.on('party', party => {
+      State.party = party;
+      if (State.player) {
+        Social.render();
+        Battle.render();
+      }
+    });
+
+    socket.on('partyFight', data => Battle.onTeamFight(data));
+    socket.on('partyFightEnd', data => Battle.onTeamFightEnd(data));
   }
 
   function normalizePlayer(p) {
@@ -106,5 +135,24 @@ const Net = (() => {
     socket.emit('worldChat', message);
   }
 
-  return { init, syncPlayer, buyItem, listBuild, cancelListing, buyListing, moveWorld, placeHome, chat };
+  const send = (event, payload) => socket.emit(event, payload);
+  const social = {
+    friendRequest: (targetId, name) => send('friendRequest', { targetId, name }),
+    friendRespond: (fromId, accept) => send('friendRespond', { fromId, accept }),
+    friendRemove: friendId => send('friendRemove', { friendId }),
+    dmSend: (to, message) => send('dmSend', { to, message }),
+    dmHistory: (withId, cb) => socket.emit('dmHistory', { with: withId }, cb),
+    gift: (to, kind, itemId, amount) => send('giftSend', { to, kind, itemId, amount }),
+    offer: (to, kind, itemId, price) => send('offerSend', { to, kind, itemId, price }),
+    offerRespond: (offerId, accept) => send('offerRespond', { offerId, accept }),
+    offerCancel: offerId => send('offerCancel', { offerId }),
+    partyInvite: to => send('partyInvite', { to }),
+    partyAccept: partyId => send('partyAccept', { partyId }),
+    partyDecline: partyId => send('partyDecline', { partyId }),
+    partyLeave: () => send('partyLeave'),
+    partyFightStart: () => send('partyFightStart'),
+    partyHit: mode => send('partyHit', { mode })
+  };
+
+  return { init, syncPlayer, buyItem, listBuild, cancelListing, buyListing, moveWorld, placeHome, chat, social };
 })();

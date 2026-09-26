@@ -11,9 +11,11 @@ const Battle = (() => {
 
   let canvas, ctx, fx, fxCtx;
   let fight = null;
+  // Latest server snapshot of a co-op fight, or null.
+  let team = null;
   let mode = localStorage.getItem('cq_attack_mode') || 'weapons';
   let lastHitAt = 0;
-  const effects = { floaters: [], playerLunge: -1e9, beastLunge: -1e9, beastFlash: -1e9, playerFlash: -1e9 };
+  const effects = { floaters: [], playerLunge: -1e9, beastLunge: -1e9, beastFlash: -1e9, playerFlash: -1e9, memberLunge: {} };
 
   const hunt = () => State.player.hunt;
   const currentLevel = () => LEVELS[hunt().level - 1];
@@ -22,6 +24,10 @@ const Battle = (() => {
   const groundY = () => canvas.height - 40;
   const beastX = () => canvas.width - 190;
   const PLAYER_X = 150;
+  const inTeam = () => !!(State.party && State.party.members.length > 1);
+  const isLeader = () => !!(State.party && State.party.leader === State.playerId);
+  const teamLevel = () => LEVELS[Math.max(1, Math.min(LEVELS.length, (State.party && State.party.level) || 1)) - 1];
+  const memberX = i => 70 + i * 75;
 
   function init() {
     canvas = document.getElementById('battleCanvas');
@@ -33,12 +39,14 @@ const Battle = (() => {
 
     const fightBtn = document.getElementById('fightBtn');
     fightBtn.addEventListener('click', () => {
-      if (fight) hit(); else startFight();
+      if (fight || team) hit();
+      else if (inTeam()) startTeamFight();
+      else startFight();
       fightBtn.blur();
     });
-    canvas.addEventListener('click', () => { if (fight) hit(); });
+    canvas.addEventListener('click', () => { if (fight || team) hit(); });
     document.addEventListener('keydown', e => {
-      if (!fight || e.code !== 'Space') return;
+      if (!(fight || team) || e.code !== 'Space') return;
       e.preventDefault();
       hit();
     });
@@ -61,12 +69,12 @@ const Battle = (() => {
     requestAnimationFrame(loop);
   }
 
-  function isFighting() { return !!fight; }
+  function isFighting() { return !!fight || !!team; }
 
   function render() {
     if (!canvas || !State.player) return;
     const h = hunt();
-    const lvl = currentLevel();
+    const lvl = team ? LEVELS[team.level - 1] : inTeam() ? teamLevel() : currentLevel();
     const stats = getCombatStats(State.player);
     document.getElementById('huntLevel').textContent = h.level;
     document.getElementById('huntRunCred').textContent = h.runCred;
@@ -78,16 +86,87 @@ const Battle = (() => {
       b.disabled = b.dataset.mode === 'weapons' && !hasWeapons();
     });
     const fightBtn = document.getElementById('fightBtn');
-    fightBtn.textContent = fight ? '💥 Hit! (Space)' : `Fight ${lvl.name} — 💰${lvl.reward}`;
-    fightBtn.classList.toggle('hitting', !!fight);
+    const n = inTeam() ? State.party.members.length : 1;
+    if (fight || team) fightBtn.textContent = '💥 Hit! (Space)';
+    else if (inTeam() && !isLeader()) fightBtn.textContent = `Waiting for your team leader to start ${lvl.name}…`;
+    else if (inTeam()) fightBtn.textContent = `Team Fight ${lvl.name} — 💰${lvl.reward} split ${n} ways`;
+    else fightBtn.textContent = `Fight ${lvl.name} — 💰${lvl.reward}`;
+    fightBtn.disabled = !fight && !team && inTeam() && !isLeader();
+    fightBtn.classList.toggle('hitting', !!(fight || team));
     document.getElementById('loadoutStats').innerHTML =
       `⚔ Attack <strong>${stats.attack}</strong> · ❤ Health <strong>${stats.health}</strong> · 🛡 Defense <strong>${stats.defense}</strong>` +
       `<br>Recommended for this beast: ~${lvl.recommendedPower} attack`;
-    if (!fight) {
+    if (!fight && !team) {
       setBar('player', stats.health, stats.health);
       setBar('enemy', lvl.enemyHealth, lvl.enemyHealth);
     }
     renderTrack();
+    renderParty();
+  }
+
+  function renderParty() {
+    const panel = document.getElementById('partyPanel');
+    if (!panel) return;
+    const party = State.party;
+    const online = ((State.social && State.social.friends) || []).filter(f => f.online && !(party && party.members.some(m => m.id === f.id)));
+    panel.replaceChildren();
+    const title = document.createElement('div');
+    title.className = 'party-title';
+    title.textContent = party ? `⚔ Your Team (${party.members.length}/4)` : '⚔ Hunt with friends';
+    panel.appendChild(title);
+
+    if (party) {
+      const chips = document.createElement('div');
+      chips.className = 'party-members';
+      party.members.forEach(m => {
+        const chip = document.createElement('span');
+        chip.className = 'party-chip' + (m.id === State.playerId ? ' me' : '');
+        chip.textContent = `${m.id === party.leader ? '👑 ' : ''}${m.name} · lvl ${m.level}`;
+        chips.appendChild(chip);
+      });
+      panel.appendChild(chips);
+      const note = document.createElement('div');
+      note.className = 'party-note';
+      note.textContent = party.members.length > 1
+        ? `Team fights are against the leader's beast (level ${party.level}). Beasts get tougher with more hunters, and the cred payout is split evenly. Anyone on that same level advances too; if the team falls, they lose their run.`
+        : 'Invite an online friend to start a team hunt.';
+      panel.appendChild(note);
+    } else {
+      const note = document.createElement('div');
+      note.className = 'party-note';
+      note.textContent = 'Team up with an online friend to take on beasts together and split the payout.';
+      panel.appendChild(note);
+    }
+
+    const row = document.createElement('div');
+    row.className = 'party-row';
+    if (!team && online.length && (!party || party.members.length < 4)) {
+      const select = document.createElement('select');
+      online.forEach(f => {
+        const o = document.createElement('option');
+        o.value = f.id;
+        o.textContent = f.name;
+        select.appendChild(o);
+      });
+      const invite = document.createElement('button');
+      invite.className = 'team-btn';
+      invite.textContent = 'Invite';
+      invite.addEventListener('click', () => Net.social.partyInvite(select.value));
+      row.append(select, invite);
+    } else if (!party && !online.length) {
+      const hint = document.createElement('span');
+      hint.className = 'empty-note';
+      hint.textContent = 'No friends online. Add friends from the Friends tab.';
+      row.appendChild(hint);
+    }
+    if (party && !team) {
+      const leave = document.createElement('button');
+      leave.className = 'danger-btn';
+      leave.textContent = 'Leave Team';
+      leave.addEventListener('click', () => Net.social.partyLeave());
+      row.appendChild(leave);
+    }
+    panel.appendChild(row);
   }
 
   function renderTrack() {
@@ -147,11 +226,18 @@ const Battle = (() => {
   }
 
   function hit() {
-    if (!fight) return;
+    if (!fight && !team) return;
     const now = performance.now();
     const weapons = usingWeapons();
     if (now - lastHitAt < (weapons ? WEAPON_COOLDOWN : FIST_COOLDOWN)) return;
     lastHitAt = now;
+    if (team) {
+      const me = team.members.find(m => m.id === State.playerId);
+      if (!me || me.hp <= 0) return;
+      effects.memberLunge[State.playerId] = now;
+      Net.social.partyHit(weapons ? 'weapons' : 'fists');
+      return;
+    }
     const stats = getCombatStats(State.player);
     const base = weapons ? stats.attack : stats.unarmedAttack;
     const dmg = Math.max(1, Math.round(base * (0.85 + Math.random() * 0.3)));
@@ -185,6 +271,63 @@ const Battle = (() => {
     State.player.cred -= lost;
     State.player.hunt = { level: 1, runCred: 0, inFight: false };
     return lost;
+  }
+
+  function startTeamFight() {
+    if (!isLeader()) return UI.toast('Only the team leader can start the fight.');
+    Net.social.partyFightStart();
+  }
+
+  function onTeamFight(data) {
+    const now = performance.now();
+    if (!team) {
+      document.getElementById('battleLog').innerHTML = '';
+      log(`Team hunt! ${data.name} faces ${data.members.map(m => m.name).join(', ')}. Strike together!`);
+      lastHitAt = 0;
+      UI.showTab('beasthunters');
+    }
+    team = data;
+    const ev = data.event;
+    const idx = id => data.members.findIndex(m => m.id === id);
+    if (ev && ev.type === 'hit') {
+      effects.beastFlash = now;
+      if (ev.by !== State.playerId) effects.memberLunge[ev.by] = now;
+      const mine = ev.by === State.playerId;
+      effects.floaters.push({ x: beastX() + (Math.random() - 0.5) * 60, y: groundY() - 160 - (mine ? 0 : 20), text: `-${ev.dmg}`, color: mine ? '#fde047' : '#93c5fd', born: now });
+    } else if (ev && ev.type === 'beastHit') {
+      effects.beastLunge = now;
+      const i = idx(ev.target);
+      if (ev.target === State.playerId) effects.playerFlash = now;
+      if (i !== -1) effects.floaters.push({ x: memberX(i) + (Math.random() - 0.5) * 30, y: groundY() - 150, text: `-${ev.dmg}`, color: '#f87171', born: now });
+      if (ev.revived) log(`${data.members[i] ? data.members[i].name : 'A hunter'} is revived by a Phoenix Charm!`);
+      const target = data.members[i];
+      if (target && target.hp <= 0) log(`${target.name} is knocked out!`);
+    } else if (ev && ev.type === 'left') {
+      log('A teammate fled the fight!');
+    }
+    const me = data.members.find(m => m.id === State.playerId);
+    if (me) setBar('player', me.hp, me.max);
+    setBar('enemy', data.enemyHp, data.enemyMax);
+    document.getElementById('enemyName').textContent = data.name + (data.isBoss ? ' (BOSS)' : '');
+    const fightBtn = document.getElementById('fightBtn');
+    fightBtn.textContent = me && me.hp <= 0 ? '💀 Knocked out — cheer on your team!' : '💥 Hit! (Space)';
+    fightBtn.classList.add('hitting');
+    fightBtn.disabled = false;
+  }
+
+  function onTeamFightEnd(data) {
+    team = null;
+    const r = data.result || {};
+    if (data.fled) {
+      log('You left the team fight.');
+    } else if (data.won) {
+      log(`Your team defeated ${data.name}! The 💰${data.reward} payout is split ${data.players} ways: +${data.share} creds each.`);
+      UI.toast(`🏆 Team victory! +${data.share} creds${r.advanced ? ' and you advance a level' : ''}.`);
+    } else {
+      log(`${data.name} wiped out your team.${r.reset ? ` You lost ${r.lost} creds and restart at level 1.` : ''}`);
+      UI.toast(r.reset ? `Team defeated! Lost ${r.lost} creds. Back to level 1.` : 'Team defeated! No creds lost — you were helping out.');
+    }
+    UI.renderAll();
   }
 
   function finish(won) {
@@ -230,7 +373,7 @@ const Battle = (() => {
   }
 
   function drawScene(now) {
-    const lvl = fight ? fight.lvl : currentLevel();
+    const lvl = team ? LEVELS[team.level - 1] : fight ? fight.lvl : inTeam() ? teamLevel() : currentLevel();
     const scene = SCENES[Math.min(SCENES.length - 1, Math.floor((lvl.level - 1) / 10))];
     const W = canvas.width, H = canvas.height, gy = groundY();
 
@@ -259,25 +402,31 @@ const Battle = (() => {
     ctx.drawImage(fx, 0, 0);
 
     const stats = getCombatStats(State.player);
-    const px = PLAYER_X + pulse(effects.playerLunge, now, 180) * 70;
-    drawMinifig(ctx, px, gy - 90, {
-      scale: 1.8,
-      bodyColor: stats.tier.bodyColor,
-      legColor: stats.tier.legColor,
-      glow: stats.tier.glow,
-      weapon: usingWeapons(),
-      cape: stats.tier.id >= 4,
-      facing: 1,
-      walkPhase: fight ? Math.sin(t * 6) * 0.4 : 0
-    });
+    if (team) {
+      drawTeam(now, t, gy);
+    } else {
+      const px = PLAYER_X + pulse(effects.playerLunge, now, 180) * 70;
+      drawMinifig(ctx, px, gy - 90, {
+        scale: 1.8,
+        bodyColor: stats.tier.bodyColor,
+        legColor: stats.tier.legColor,
+        glow: stats.tier.glow,
+        weapon: usingWeapons(),
+        cape: stats.tier.id >= 4,
+        facing: 1,
+        walkPhase: fight ? Math.sin(t * 6) * 0.4 : 0
+      });
+    }
 
-    if (fight) {
+    if (fight || team) {
       const cd = usingWeapons() ? WEAPON_COOLDOWN : FIST_COOLDOWN;
       const ready = Math.min(1, (now - lastHitAt) / cd);
+      const myIdx = team ? team.members.findIndex(m => m.id === State.playerId) : -1;
+      const cx = team ? memberX(Math.max(0, myIdx)) : PLAYER_X;
       ctx.strokeStyle = ready >= 1 ? '#22c55e' : '#facc15';
       ctx.lineWidth = 5;
       ctx.beginPath();
-      ctx.arc(PLAYER_X, gy - 210, 12, -Math.PI / 2, -Math.PI / 2 + ready * Math.PI * 2);
+      ctx.arc(cx, gy - (team ? 200 : 210), 12, -Math.PI / 2, -Math.PI / 2 + ready * Math.PI * 2);
       ctx.stroke();
     }
 
@@ -303,12 +452,41 @@ const Battle = (() => {
     ctx.fillStyle = '#fff';
     ctx.font = 'bold 16px sans-serif';
     ctx.fillText(`Level ${lvl.level}: ${lvl.name}${lvl.isBoss ? ' 👑' : ''}`, W / 2, 26);
-    if (!fight) {
+    if (!fight && !team) {
       ctx.font = '13px sans-serif';
       ctx.fillStyle = '#cbd5e1';
-      ctx.fillText('Press Fight to begin. Beat it to unlock the next beast.', W / 2, 46);
+      ctx.fillText(inTeam() ? 'Team hunt: the leader starts the fight. Everyone hits!' : 'Press Fight to begin. Beat it to unlock the next beast.', W / 2, 46);
     }
   }
 
-  return { init, render, isFighting };
+  function drawTeam(now, t, gy) {
+    team.members.forEach((m, i) => {
+      const tier = getTierInfo(m);
+      const down = m.hp <= 0;
+      const x = memberX(i) + (down ? 0 : pulse(effects.memberLunge[m.id] || -1e9, now, 180) * 50);
+      ctx.globalAlpha = down ? 0.35 : 1;
+      drawMinifig(ctx, x, gy - 80, {
+        scale: 1.5,
+        bodyColor: tier.bodyColor,
+        legColor: tier.legColor,
+        glow: tier.glow,
+        weapon: m.weapons,
+        cape: tier.id >= 4,
+        facing: 1,
+        walkPhase: down ? 0 : Math.sin(t * 6 + i) * 0.4
+      });
+      ctx.globalAlpha = 1;
+      const bx = memberX(i) - 28, by = gy - 180;
+      ctx.fillStyle = 'rgba(0,0,0,0.5)';
+      ctx.fillRect(bx, by, 56, 7);
+      ctx.fillStyle = m.id === State.playerId ? '#22c55e' : '#60a5fa';
+      ctx.fillRect(bx, by, 56 * Math.max(0, m.hp / m.max), 7);
+      ctx.fillStyle = m.id === State.playerId ? '#fde047' : '#fff';
+      ctx.font = 'bold 11px sans-serif';
+      ctx.textAlign = 'center';
+      ctx.fillText(down ? `💀 ${m.name}` : m.name, memberX(i), by - 4);
+    });
+  }
+
+  return { init, render, isFighting, onTeamFight, onTeamFightEnd };
 })();

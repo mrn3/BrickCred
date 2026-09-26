@@ -363,3 +363,66 @@ input, select {
 #googleButton { display: flex; justify-content: center; }
 .logout-btn { padding: 4px 10px; font-size: 12px; }
 .modal-box input { text-align: center; }
+
+/* ---------- Social ---------- */
+.tab-badge { background: #dc2626; color: #fff; border-radius: 999px; font-size: 11px; padding: 1px 6px; margin-left: 4px; vertical-align: top; }
+.player-link { background: none; color: #1e3a8a; padding: 2px 0; font-size: 14px; text-align: left; }
+.player-link:hover { background: none; text-decoration: underline; }
+.player-menu {
+  position: fixed; z-index: 900; width: 190px; background: #fff; border: 3px solid #1e293b;
+  border-radius: 10px; padding: 8px; display: flex; flex-direction: column; gap: 6px;
+  box-shadow: 4px 4px 0 rgba(0,0,0,0.25);
+}
+.menu-title { font-weight: 800; font-size: 14px; }
+.team-btn { background: #7c3aed; }
+.team-btn:hover { background: #6d28d9; }
+.link-btn { background: none; color: #64748b; text-decoration: underline; padding: 4px; }
+.link-btn:hover { background: none; color: #dc2626; }
+
+.friends-layout { display: flex; gap: 16px; align-items: flex-start; flex-wrap: wrap; }
+.friends-side { flex: 1 1 380px; }
+.friends-side h3 { margin: 14px 0 6px; font-size: 15px; }
+.friends-main { flex: 1 1 380px; background: #fff; border-radius: 12px; padding: 12px; min-height: 380px; }
+.add-friend { display: flex; gap: 8px; }
+.add-friend input { flex: 1; margin: 0; }
+.social-list { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 6px; }
+.social-row { display: flex; gap: 6px; align-items: center; background: #fff; border-radius: 8px; padding: 6px 8px; font-size: 13px; }
+.social-row.muted { opacity: 0.75; }
+.social-row.invite { border-left: 4px solid #7c3aed; }
+.social-row.offer { border-left: 4px solid #2563eb; }
+.social-row button { padding: 4px 10px; font-size: 12px; }
+.social-name { flex: 1; }
+.offer-thumb { width: 36px; height: 36px; object-fit: contain; background: #eef4fb; border-radius: 4px; }
+.friend-row { background: #fff; border-radius: 8px; padding: 8px; border: 2px solid transparent; }
+.friend-row.active { border-color: #ffcc00; }
+.friend-head { display: flex; align-items: center; gap: 6px; }
+.friend-meta { font-size: 12px; color: #64748b; flex: 1; }
+.friend-actions { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 6px; }
+.friend-actions button { padding: 4px 8px; font-size: 12px; }
+.dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
+.dot.on { background: #22c55e; }
+.dot.off { background: #9ca3af; }
+.unread { background: #dc2626; color: #fff; border-radius: 999px; font-size: 11px; padding: 1px 6px; }
+.dm-empty { color: #64748b; text-align: center; margin-top: 150px; }
+.dm-panel { display: flex; flex-direction: column; height: 380px; }
+.dm-panel h3 { margin: 0 0 8px; }
+.dm-messages { flex: 1; overflow-y: auto; background: #f1f5f9; border-radius: 8px; padding: 8px; display: flex; flex-direction: column; gap: 6px; }
+.dm { max-width: 75%; padding: 6px 10px; border-radius: 12px; font-size: 14px; word-wrap: break-word; }
+.dm.mine { align-self: flex-end; background: #2563eb; color: #fff; }
+.dm.theirs { align-self: flex-start; background: #fff; border: 1px solid #cbd5e1; }
+.dm-time { font-size: 10px; opacity: 0.7; margin-top: 2px; }
+.dm-form { display: flex; gap: 8px; margin-top: 8px; }
+.dm-form input { flex: 1; margin: 0; }
+
+.party-panel { background: #1e1b4b; color: #e0e7ff; border-radius: 12px; padding: 10px 14px; margin-bottom: 12px; }
+.party-title { font-weight: 800; }
+.party-members { display: flex; flex-wrap: wrap; gap: 6px; margin: 6px 0; }
+.party-chip { background: #312e81; border-radius: 999px; padding: 3px 10px; font-size: 13px; }
+.party-chip.me { background: #4c1d95; outline: 2px solid #c4b5fd; }
+.party-note { font-size: 12px; color: #c7d2fe; margin: 4px 0; }
+.party-row { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; margin-top: 6px; }
+.party-row select { width: auto; margin: 0; }
+.party-panel .empty-note { color: #a5b4fc; }
+#fightBtn:disabled { opacity: 0.6; cursor: not-allowed; }
+
+.dm-panel.hidden, .player-menu.hidden, .tab-badge.hidden, #tradeAmount.hidden, .dm-empty.hidden { display: none; }

@@ -293,16 +293,22 @@ const UI = (() => {
     const list = document.getElementById('onlinePlayersList');
     list.innerHTML = '';
     const me = State.player && State.player.world;
-    State.onlinePlayers.filter(p => {
-      if (p.id === State.playerId) return false;
-      return !me || !p.world || Math.hypot(p.world.x - me.x, p.world.y - me.y) <= 240;
-    }).forEach(p => {
-      const li = document.createElement('li');
-      const distance = me && p.world ? Math.round(Math.hypot(p.world.x - me.x, p.world.y - me.y)) : null;
-      li.textContent = `${p.name} (${getTierInfo(p).name})${distance === null ? '' : ` · ${distance}m`}`;
-      list.appendChild(li);
-    });
-    if (!list.children.length) list.innerHTML = '<li>No one else is here yet.</li>';
+    const distanceTo = p => (me && p.world ? Math.round(Math.hypot(p.world.x - me.x, p.world.y - me.y)) : Infinity);
+    State.onlinePlayers
+      .filter(p => p.id !== State.playerId)
+      .sort((a, b) => distanceTo(a) - distanceTo(b))
+      .forEach(p => {
+        const li = document.createElement('li');
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'player-link';
+        const d = distanceTo(p);
+        btn.textContent = `${Social.isFriend(p.id) ? '★ ' : ''}${p.name} (${getTierInfo(p).name})${d === Infinity ? '' : ` · ${d}m`}`;
+        btn.addEventListener('click', e => Social.openPlayerMenu(p.id, e.clientX, e.clientY));
+        li.appendChild(btn);
+        list.appendChild(li);
+      });
+    if (!list.children.length) list.innerHTML = '<li>No one else is online yet.</li>';
   }
 
   function renderAll() {
