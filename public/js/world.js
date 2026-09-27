@@ -10,6 +10,8 @@ const World = (() => {
   let phase = 0;
   let lastMoveSent = 0;
   const keys = {};
+  // Normalized -1..1 vector from the on-screen touch stick.
+  const stick = { x: 0, y: 0 };
   // Smoothed on-screen state for other players, keyed by player id.
   const remote = new Map();
 
@@ -30,7 +32,61 @@ const World = (() => {
     });
     document.getElementById('placeHomeBtn').addEventListener('click', placeHome);
     document.getElementById('worldChatForm').addEventListener('submit', sendChat);
+    initJoystick();
     requestAnimationFrame(loop);
+  }
+
+  function initJoystick() {
+    const pad = document.getElementById('worldJoystick');
+    const knob = pad.querySelector('.joystick-knob');
+    let activeId = null;
+
+    const setKnob = (x, y) => {
+      knob.style.transform = `translate(${x}px, ${y}px)`;
+    };
+    const reset = () => {
+      activeId = null;
+      stick.x = 0;
+      stick.y = 0;
+      setKnob(0, 0);
+    };
+    const track = e => {
+      const r = pad.getBoundingClientRect();
+      const radius = r.width / 2;
+      let dx = e.clientX - (r.left + radius);
+      let dy = e.clientY - (r.top + radius);
+      const dist = Math.hypot(dx, dy) || 1;
+      const clamped = Math.min(dist, radius);
+      dx = (dx / dist) * clamped;
+      dy = (dy / dist) * clamped;
+      setKnob(dx, dy);
+      const dead = radius * 0.2;
+      if (clamped < dead) {
+        stick.x = 0;
+        stick.y = 0;
+      } else {
+        stick.x = dx / radius;
+        stick.y = dy / radius;
+      }
+    };
+
+    pad.addEventListener('pointerdown', e => {
+      activeId = e.pointerId;
+      pad.setPointerCapture(e.pointerId);
+      track(e);
+      e.preventDefault();
+    });
+    pad.addEventListener('pointermove', e => {
+      if (e.pointerId !== activeId) return;
+      track(e);
+      e.preventDefault();
+    });
+    ['pointerup', 'pointercancel', 'lostpointercapture'].forEach(type => {
+      pad.addEventListener(type, e => {
+        if (e.pointerId === activeId) reset();
+      });
+    });
+    window.addEventListener('blur', reset);
   }
 
   function canvasPoint(e) {
@@ -86,6 +142,15 @@ const World = (() => {
     if (keys['arrowright'] || keys['d']) dx += 1;
     if (keys['arrowup'] || keys['w']) dy -= 1;
     if (keys['arrowdown'] || keys['s']) dy += 1;
+    if (stick.x || stick.y) {
+      dx = stick.x;
+      dy = stick.y;
+    }
+    const mag = Math.hypot(dx, dy);
+    if (mag > 1) {
+      dx /= mag;
+      dy /= mag;
+    }
     moving = dx !== 0 || dy !== 0;
     if (dx !== 0) facing = dx > 0 ? 1 : -1;
     const speed = 3 * (State.player ? getVehicleStats(State.player).speedMult : 1);

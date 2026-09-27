@@ -29,8 +29,13 @@
 
 <main>
   <section id="tab-world" class="tab-panel active">
-    <p class="hint">Use Arrow Keys / WASD to explore the larger world. The view follows you as you travel. <b>Click another player</b> to friend, chat, trade or team up. Arrows at the edge point to players out of view.</p>
-    <canvas id="worldCanvas" width="800" height="450"></canvas>
+    <p class="hint">Use Arrow Keys / WASD &mdash; or the on-screen stick on touch devices &mdash; to explore the larger world. The view follows you as you travel. <b>Tap another player</b> to friend, chat, trade or team up. Arrows at the edge point to players out of view.</p>
+    <div class="world-stage">
+      <canvas id="worldCanvas" width="800" height="450"></canvas>
+      <div id="worldJoystick" class="joystick">
+        <div class="joystick-knob"></div>
+      </div>
+    </div>
     <div id="worldTools">
       <button id="placeHomeBtn">Place My Home Here</button>
       <form id="worldChatForm">
