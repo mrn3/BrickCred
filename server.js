@@ -19,10 +19,10 @@ const SESSION_COOKIE = 'cq_session';
 const SESSION_TTL_MS = 30 * 24 * 60 * 60 * 1000;
 const PUBLIC_DIR = path.join(__dirname, 'public');
 const CATALOG_FILE = path.join(PUBLIC_DIR, 'data', 'catalog.json');
-const WORLD_WIDTH = 2400;
-const WORLD_HEIGHT = 1600;
-const WORLD_ROAD_X = [240, 720, 1200, 1680, 2160];
-const WORLD_ROAD_Y = [220, 700, 1180];
+const WORLD_WIDTH = 4200;
+const WORLD_HEIGHT = 3000;
+const WORLD_ROAD_X = [300, 900, 1500, 2100, 2700, 3300, 3900];
+const WORLD_ROAD_Y = [300, 900, 1500, 2100, 2700];
 const SIDEWALK_HALF_WIDTH = 45;
 const VEHICLE_ROAD_HALF_WIDTH = 20;
 
