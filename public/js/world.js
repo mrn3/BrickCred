@@ -31,7 +31,6 @@ const World = (() => {
       canvas.style.cursor = playerAt(e) ? 'pointer' : 'default';
     });
     document.getElementById('placeHomeBtn').addEventListener('click', placeHome);
-    document.getElementById('worldChatForm').addEventListener('submit', sendChat);
     initJoystick();
     requestAnimationFrame(loop);
   }
@@ -224,17 +223,6 @@ const World = (() => {
     ctx.fillText(`${player.name}'s home`, x, y + 92);
   }
 
-  function drawBubble(message, x, y) {
-    const text = message.length > 34 ? message.slice(0, 33) + '…' : message;
-    ctx.font = '12px sans-serif';
-    const width = Math.min(240, ctx.measureText(text).width + 18);
-    ctx.fillStyle = 'rgba(255,255,255,0.94)';
-    ctx.fillRect(x - width / 2, y - 18, width, 24);
-    ctx.fillStyle = '#111827';
-    ctx.textAlign = 'center';
-    ctx.fillText(text, x, y - 2);
-  }
-
   function drawPlayer(player, isLocal) {
     const r = isLocal ? null : remote.get(player.id);
     if (!isLocal && !r) return;
@@ -268,8 +256,6 @@ const World = (() => {
     ctx.font = isLocal ? '14px sans-serif' : 'bold 14px sans-serif';
     ctx.textAlign = 'center';
     ctx.fillText(`${friend ? '★ ' : ''}${player.name} · ${tier.name}`, x, y - 60);
-    const chat = [...State.chatMessages].reverse().find(m => m.id === player.id && Date.now() - m.receivedAt < 6000);
-    if (chat) drawBubble(chat.message, x, y - 82);
   }
 
   // Arrows at the screen edge pointing to players outside the view.
@@ -336,30 +322,6 @@ const World = (() => {
     UI.toast('Your home has been placed here.');
   }
 
-  function sendChat(event) {
-    event.preventDefault();
-    const input = document.getElementById('worldChatInput');
-    const message = input.value.trim();
-    if (!message) return;
-    Net.chat(message);
-    input.value = '';
-  }
-
-  function renderChat() {
-    const box = document.getElementById('worldChatBox');
-    if (!box) return;
-    box.innerHTML = '';
-    State.chatMessages.slice(-8).forEach(message => {
-      const line = document.createElement('div');
-      line.className = 'chat-line';
-      const name = document.createElement('strong');
-      name.textContent = `${message.name}: `;
-      line.append(name, document.createTextNode(message.message));
-      box.appendChild(line);
-    });
-    box.scrollTop = box.scrollHeight;
-  }
-
   function loop(timestamp) {
     try {
       update(timestamp);
@@ -370,5 +332,5 @@ const World = (() => {
     requestAnimationFrame(loop);
   }
 
-  return { init, renderChat, goTo };
+  return { init, goTo };
 })();

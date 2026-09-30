@@ -345,21 +345,6 @@ io.on('connection', socket => {
     io.to('lobby').emit('worldPlayers', onlineList());
   });
 
-  socket.on('worldChat', rawMessage => {
-    const p = db.players[socket.currentPlayerId];
-    const message = String(rawMessage || '').trim().slice(0, 160);
-    if (!p || !message) return;
-    const origin = p.world || { x: 400, y: 300 };
-    for (const [, peerSocket] of io.sockets.sockets) {
-      const peer = db.players[peerSocket.currentPlayerId];
-      if (!peer || !peer.online) continue;
-      const location = peer.world || { x: 400, y: 300 };
-      if (Math.hypot(location.x - origin.x, location.y - origin.y) <= 240) {
-        peerSocket.emit('worldChat', { id: p.id, name: p.name, message });
-      }
-    }
-  });
-
   socket.on('buyItem', ({ itemId, kind }) => {
     const p = db.players[socket.currentPlayerId];
     if (!p) return;

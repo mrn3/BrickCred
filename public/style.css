@@ -94,16 +94,11 @@ canvas {
 }
 
 #worldTools { display: flex; gap: 10px; margin: 12px auto 0; max-width: 800px; }
-#worldChatForm { display: flex; gap: 8px; flex: 1; }
-#worldChatInput { flex: 1; min-width: 100px; }
-#worldSocial { display: grid; grid-template-columns: 220px 1fr; gap: 12px; margin: 12px auto 0; max-width: 800px; }
-#onlinePlayersBox, #worldChatBox { background: #fff; border-radius: 8px; padding: 10px 16px; box-shadow: 0 2px 6px rgba(0,0,0,0.08); }
+#worldSocial { display: grid; grid-template-columns: 1fr; gap: 12px; margin: 12px auto 0; max-width: 800px; }
+#onlinePlayersBox { background: #fff; border-radius: 8px; padding: 10px 16px; box-shadow: 0 2px 6px rgba(0,0,0,0.08); }
 #onlinePlayersBox h3 { margin: 0; font-size: 15px; }
 #onlinePlayersBox ul { list-style: none; padding: 0; margin: 6px 0 0; }
 #onlinePlayersBox li { padding: 3px 0; font-size: 14px; }
-#worldChatBox { height: 92px; overflow-y: auto; font-size: 13px; }
-.chat-line { margin-bottom: 5px; }
-.chat-line strong { color: #b91c1c; }
 
 @media (max-width: 620px) {
   #worldTools { flex-direction: column; }
@@ -415,9 +410,8 @@ input, select {
 .link-btn:hover { background: none; color: #dc2626; }
 
 .friends-layout { display: flex; gap: 16px; align-items: flex-start; flex-wrap: wrap; }
-.friends-side { flex: 1 1 380px; }
+.friends-side { flex: 1 1 100%; }
 .friends-side h3 { margin: 14px 0 6px; font-size: 15px; }
-.friends-main { flex: 1 1 380px; background: #fff; border-radius: 12px; padding: 12px; min-height: 380px; }
 .add-friend { display: flex; gap: 8px; }
 .add-friend input { flex: 1; margin: 0; }
 .social-list { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 6px; }
@@ -429,7 +423,6 @@ input, select {
 .social-name { flex: 1; }
 .offer-thumb { width: 36px; height: 36px; object-fit: contain; background: #eef4fb; border-radius: 4px; }
 .friend-row { background: #fff; border-radius: 8px; padding: 8px; border: 2px solid transparent; }
-.friend-row.active { border-color: #ffcc00; }
 .friend-head { display: flex; align-items: center; gap: 6px; }
 .friend-meta { font-size: 12px; color: #64748b; flex: 1; }
 .friend-actions { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 6px; }
@@ -437,17 +430,6 @@ input, select {
 .dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
 .dot.on { background: #22c55e; }
 .dot.off { background: #9ca3af; }
-.unread { background: #dc2626; color: #fff; border-radius: 999px; font-size: 11px; padding: 1px 6px; }
-.dm-empty { color: #64748b; text-align: center; margin-top: 150px; }
-.dm-panel { display: flex; flex-direction: column; height: 380px; }
-.dm-panel h3 { margin: 0 0 8px; }
-.dm-messages { flex: 1; overflow-y: auto; background: #f1f5f9; border-radius: 8px; padding: 8px; display: flex; flex-direction: column; gap: 6px; }
-.dm { max-width: 75%; padding: 6px 10px; border-radius: 12px; font-size: 14px; word-wrap: break-word; }
-.dm.mine { align-self: flex-end; background: #2563eb; color: #fff; }
-.dm.theirs { align-self: flex-start; background: #fff; border: 1px solid #cbd5e1; }
-.dm-time { font-size: 10px; opacity: 0.7; margin-top: 2px; }
-.dm-form { display: flex; gap: 8px; margin-top: 8px; }
-.dm-form input { flex: 1; margin: 0; }
 
 .party-panel { background: #1e1b4b; color: #e0e7ff; border-radius: 12px; padding: 10px 14px; margin-bottom: 12px; }
 .party-title { font-weight: 800; }
@@ -460,4 +442,4 @@ input, select {
 .party-panel .empty-note { color: #a5b4fc; }
 #fightBtn:disabled { opacity: 0.6; cursor: not-allowed; }
 
-.dm-panel.hidden, .player-menu.hidden, .tab-badge.hidden, #tradeAmount.hidden, .dm-empty.hidden { display: none; }
+.player-menu.hidden, .tab-badge.hidden, #tradeAmount.hidden { display: none; }

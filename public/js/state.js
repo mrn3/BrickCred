@@ -4,7 +4,6 @@ const State = {
   catalog: null,
   listings: [],
   onlinePlayers: [],
-  chatMessages: [],
   social: { friends: [], incoming: [], outgoing: [], offers: [], partyInvites: [] },
   party: null
 };

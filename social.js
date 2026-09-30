@@ -325,7 +325,6 @@ module.exports = function attachSocial({ io, db, store, catalog, weaponById, pow
       const other = typeof otherId === 'string' ? db.players[otherId] : null;
       return other && areFriends(p, other) ? other : null;
     };
-    let lastDm = 0;
 
     socket.on('friendRequest', payload => {
       const p = me();
@@ -371,26 +370,6 @@ module.exports = function attachSocial({ io, db, store, catalog, weaponById, pow
       scheduleSave([p.id, other.id]);
       pushSocial(p.id);
       pushSocial(other.id);
-    });
-
-    socket.on('dmSend', ({ to, message } = {}) => {
-      const p = me();
-      const other = p && friendOf(p, to);
-      const body = String(message || '').trim().slice(0, 300);
-      if (!other || !body) return;
-      const now = Date.now();
-      if (now - lastDm < 250) return;
-      lastDm = now;
-      const msg = store.addMessage(p.id, other.id, body);
-      emitTo(other.id, 'dm', msg);
-      emitTo(p.id, 'dm', msg);
-    });
-
-    socket.on('dmHistory', ({ with: otherId } = {}, ack) => {
-      const p = me();
-      if (typeof ack !== 'function') return;
-      const other = p && friendOf(p, otherId);
-      ack(other ? store.getConversation(p.id, other.id) : []);
     });
 
     socket.on('giftSend', ({ to, kind, itemId, amount } = {}) => {

@@ -46,12 +46,6 @@ const Net = (() => {
       UI.renderOnlinePlayers();
     });
 
-    socket.on('worldChat', message => {
-      State.chatMessages.push({ ...message, receivedAt: Date.now() });
-      State.chatMessages = State.chatMessages.slice(-30);
-      World.renderChat();
-    });
-
     socket.on('itemSold', data => {
       UI.toast(`💸 ${data.buyer} bought your "${data.name}" for ${data.price} creds!`);
     });
@@ -66,8 +60,6 @@ const Net = (() => {
       State.social = data;
       if (State.player) Social.render();
     });
-
-    socket.on('dm', msg => Social.onDm(msg));
 
     socket.on('party', party => {
       State.party = party;
@@ -131,17 +123,11 @@ const Net = (() => {
     socket.emit('placeHome', { x, y });
   }
 
-  function chat(message) {
-    socket.emit('worldChat', message);
-  }
-
   const send = (event, payload) => socket.emit(event, payload);
   const social = {
     friendRequest: (targetId, name) => send('friendRequest', { targetId, name }),
     friendRespond: (fromId, accept) => send('friendRespond', { fromId, accept }),
     friendRemove: friendId => send('friendRemove', { friendId }),
-    dmSend: (to, message) => send('dmSend', { to, message }),
-    dmHistory: (withId, cb) => socket.emit('dmHistory', { with: withId }, cb),
     gift: (to, kind, itemId, amount) => send('giftSend', { to, kind, itemId, amount }),
     offer: (to, kind, itemId, price) => send('offerSend', { to, kind, itemId, price }),
     offerRespond: (offerId, accept) => send('offerRespond', { offerId, accept }),
@@ -154,5 +140,5 @@ const Net = (() => {
     partyHit: mode => send('partyHit', { mode })
   };
 
-  return { init, syncPlayer, buyItem, listBuild, cancelListing, buyListing, moveWorld, placeHome, chat, social };
+  return { init, syncPlayer, buyItem, listBuild, cancelListing, buyListing, moveWorld, placeHome, social };
 })();

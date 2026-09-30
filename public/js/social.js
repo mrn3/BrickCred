@@ -1,8 +1,5 @@
-// Friends tab: friend requests, direct messages, gifts/sales to friends and team invites.
+// Friends tab: friend requests, gifts/sales to friends and team invites.
 const Social = (() => {
-  const conversations = new Map();
-  const unread = new Map();
-  let activeChat = null;
   let trade = null;
 
   function el(tag, props, ...children) {
@@ -30,14 +27,6 @@ const Social = (() => {
       Net.social.friendRequest(null, name);
       input.value = '';
     });
-    document.getElementById('dmForm').addEventListener('submit', e => {
-      e.preventDefault();
-      const input = document.getElementById('dmInput');
-      const message = input.value.trim();
-      if (!message || !activeChat) return;
-      Net.social.dmSend(activeChat, message);
-      input.value = '';
-    });
     document.getElementById('tradeForm').addEventListener('submit', onTradeSubmit);
     document.getElementById('tradeCancelBtn').addEventListener('click', closeTrade);
     document.getElementById('tradeItem').addEventListener('change', updateTradeAmount);
@@ -47,26 +36,13 @@ const Social = (() => {
         menu.classList.add('hidden');
       }
     });
-    document.querySelector('.tab-btn[data-tab="friends"]').addEventListener('click', () => {
-      if (activeChat) markRead(activeChat);
-    });
     render();
-  }
-
-  function friendsTabOpen() {
-    return document.getElementById('tab-friends').classList.contains('active');
-  }
-
-  function markRead(id) {
-    unread.delete(id);
-    renderBadge();
   }
 
   function renderBadge() {
     const s = S();
-    const unreadCount = [...unread.values()].reduce((a, b) => a + b, 0);
     const incomingOffers = s.offers.filter(o => o.toId === State.playerId).length;
-    const count = s.incoming.length + s.partyInvites.length + incomingOffers + unreadCount;
+    const count = s.incoming.length + s.partyInvites.length + incomingOffers;
     const badge = document.getElementById('friendsBadge');
     badge.textContent = count;
     badge.classList.toggle('hidden', !count);
@@ -106,16 +82,13 @@ const Social = (() => {
     const list = document.getElementById('friendsList');
     const friends = [...s.friends].sort((a, b) => (b.online - a.online) || a.name.localeCompare(b.name));
     list.replaceChildren(...friends.map(f => {
-      const n = unread.get(f.id) || 0;
       const inParty = State.party && State.party.members.some(m => m.id === f.id);
-      return el('li', { className: 'friend-row' + (activeChat === f.id ? ' active' : '') },
+      return el('li', { className: 'friend-row' },
         el('div', { className: 'friend-head' },
           el('span', { className: 'dot ' + (f.online ? 'on' : 'off') }),
           el('strong', {}, f.name),
-          el('span', { className: 'friend-meta' }, `${tierName(f)} · Beast lvl ${f.level}`),
-          n ? el('span', { className: 'unread' }, n) : ''),
+          el('span', { className: 'friend-meta' }, `${tierName(f)} · Beast lvl ${f.level}`)),
         el('div', { className: 'friend-actions' },
-          el('button', { onclick: () => openChat(f.id) }, '💬 Chat'),
           el('button', { className: 'primary-btn', onclick: () => openTrade(f.id, 'gift') }, '🎁 Gift'),
           el('button', { className: 'buy-listing-btn', onclick: () => openTrade(f.id, 'sell') }, '💰 Sell'),
           f.online && !inParty ? el('button', { className: 'team-btn', onclick: () => Net.social.partyInvite(f.id) }, '⚔ Team Up') : '',
@@ -124,62 +97,12 @@ const Social = (() => {
     }));
     if (!friends.length) list.append(el('li', { className: 'empty-note' }, 'No friends yet. Add someone by username, or click a player in the World.'));
 
-    if (activeChat && !friend(activeChat)) activeChat = null;
-    renderChat();
   }
 
   function visit(id) {
     const p = State.onlinePlayers.find(x => x.id === id);
     if (!p || !p.world) return UI.toast('They are not in the World right now.');
     World.goTo(p.world.x, p.world.y);
-  }
-
-  function openChat(id) {
-    activeChat = id;
-    UI.showTab('friends');
-    markRead(id);
-    render();
-    Net.social.dmHistory(id, messages => {
-      conversations.set(id, Array.isArray(messages) ? messages : []);
-      if (activeChat === id) renderChat();
-    });
-    document.getElementById('dmInput').focus();
-  }
-
-  function renderChat() {
-    const panel = document.getElementById('dmPanel');
-    const f = activeChat && friend(activeChat);
-    panel.classList.toggle('hidden', !f);
-    document.getElementById('dmEmpty').classList.toggle('hidden', !!f);
-    if (!f) return;
-    document.getElementById('dmTitle').textContent = `Chat with ${f.name}${f.online ? '' : ' (offline)'}`;
-    const box = document.getElementById('dmMessages');
-    const messages = conversations.get(activeChat) || [];
-    box.replaceChildren(...messages.map(m => {
-      const mine = m.fromId === State.playerId;
-      return el('div', { className: 'dm ' + (mine ? 'mine' : 'theirs') },
-        el('div', { className: 'dm-body' }, m.body),
-        el('div', { className: 'dm-time' }, new Date(m.at).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })));
-    }));
-    if (!messages.length) box.append(el('div', { className: 'empty-note' }, 'Say hi!'));
-    box.scrollTop = box.scrollHeight;
-  }
-
-  function onDm(msg) {
-    const other = msg.fromId === State.playerId ? msg.toId : msg.fromId;
-    const list = conversations.get(other);
-    if (list) {
-      list.push(msg);
-      if (list.length > 100) list.shift();
-    }
-    if (msg.fromId !== State.playerId && !(activeChat === other && friendsTabOpen())) {
-      unread.set(other, (unread.get(other) || 0) + 1);
-      const f = friend(other);
-      UI.toast(`💬 ${f ? f.name : 'Friend'}: ${msg.body.slice(0, 60)}`);
-      render();
-    } else if (activeChat === other) {
-      renderChat();
-    }
   }
 
   // ---------- Player popup (World clicks / online list) ----------
@@ -194,7 +117,6 @@ const Social = (() => {
     const items = [el('div', { className: 'menu-title' }, `${p.name} · ${tierName(p)}`)];
     if (isFriend(id)) {
       items.push(
-        act('💬 Message', () => openChat(id)),
         act('🎁 Gift', () => openTrade(id, 'gift'), 'primary-btn'),
         act('💰 Sell to', () => openTrade(id, 'sell'), 'buy-listing-btn'),
         act('⚔ Team Up', () => Net.social.partyInvite(id), 'team-btn'));
@@ -286,5 +208,5 @@ const Social = (() => {
     closeTrade();
   }
 
-  return { init, render, onDm, openPlayerMenu, openChat, isFriend };
+  return { init, render, openPlayerMenu, isFriend };
 })();
