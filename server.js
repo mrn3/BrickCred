@@ -23,6 +23,7 @@ const WORLD_WIDTH = 2400;
 const WORLD_HEIGHT = 1600;
 
 app.set('trust proxy', 1);
+app.use('/vendor/three', express.static(path.join(__dirname, 'node_modules', 'three', 'build')));
 app.use(express.static(PUBLIC_DIR));
 app.use(express.json({ limit: '10kb' }));
 
