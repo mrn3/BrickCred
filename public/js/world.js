@@ -21,7 +21,13 @@ const World = (() => {
     await World3D.init(canvas);
     window.addEventListener('keydown', e => {
       if (isTyping(e.target)) return;
-      keys[e.key.toLowerCase()] = true;
+      const key = e.key.toLowerCase();
+      if (key === 'f' && !e.repeat && document.getElementById('tab-world').classList.contains('active')) {
+        e.preventDefault();
+        toggleVehicle();
+        return;
+      }
+      keys[key] = true;
     });
     window.addEventListener('keyup', e => { keys[e.key.toLowerCase()] = false; });
     window.addEventListener('blur', () => Object.keys(keys).forEach(k => { keys[k] = false; }));
@@ -30,6 +36,7 @@ const World = (() => {
       canvas.style.cursor = playerAt(e) ? 'pointer' : 'default';
     });
     document.getElementById('placeHomeBtn').addEventListener('click', placeHome);
+    document.getElementById('toggleVehicleBtn').addEventListener('click', toggleVehicle);
     initJoystick();
     requestAnimationFrame(loop);
   }
@@ -98,6 +105,7 @@ const World = (() => {
   }
 
   function goTo(x, y) {
+    if (State.player.world.inVehicle) return UI.toast('Exit your vehicle before travelling to a player.');
     px = Math.min(WORLD_WIDTH - PLAYER_MARGIN, Math.max(PLAYER_MARGIN, x + 120));
     py = Math.min(WORLD_HEIGHT - PLAYER_MARGIN, Math.max(PLAYER_MARGIN, y));
     State.player.world.x = px;
@@ -129,9 +137,19 @@ const World = (() => {
     }
     moving = dx !== 0 || dy !== 0;
     if (dx !== 0) facing = dx > 0 ? 1 : -1;
-    const speed = 3 * (State.player ? getVehicleStats(State.player).speedMult : 1);
-    px = Math.min(WORLD_WIDTH - PLAYER_MARGIN, Math.max(PLAYER_MARGIN, px + dx * speed));
-    py = Math.min(WORLD_HEIGHT - PLAYER_MARGIN, Math.max(PLAYER_MARGIN, py + dy * speed));
+    const inVehicle = !!State.player?.world?.inVehicle;
+    const speed = 3 * (inVehicle ? getVehicleStats(State.player).speedMult : 1);
+    const nextX = Math.min(WORLD_WIDTH - PLAYER_MARGIN, Math.max(PLAYER_MARGIN, px + dx * speed));
+    const nextY = Math.min(WORLD_HEIGHT - PLAYER_MARGIN, Math.max(PLAYER_MARGIN, py + dy * speed));
+    if (!inVehicle || World3D.isVehicleRoad(nextX, nextY)) {
+      px = nextX;
+      py = nextY;
+    } else {
+      const canSlideX = World3D.isVehicleRoad(nextX, py);
+      const canSlideY = World3D.isVehicleRoad(px, nextY);
+      if (canSlideX) px = nextX;
+      if (canSlideY) py = nextY;
+    }
     if (moving) {
       phase += 0.25;
       State.player.world.x = px;
@@ -171,7 +189,7 @@ const World = (() => {
     const homeStats = getHomeStats(State.player);
     const localPlayer = {
       ...State.player,
-      house: homeStats.house ? { name: homeStats.house.name, thumbnail: homeStats.house.thumbnail } : null,
+      house: homeStats.house,
       vehicle: getVehicleStats(State.player).vehicle
     };
     const remotePlayers = [];
@@ -188,17 +206,46 @@ const World = (() => {
       });
     });
     World3D.updateScene(localPlayer, remotePlayers, px, py, facing, moving, phase);
+    updateVehicleButton(localPlayer.vehicle);
   }
 
   function placeHome() {
-    if (!getHomeStats(State.player).house) {
+    const house = getHomeStats(State.player).house;
+    if (!house) {
       UI.toast('Choose a house in My Home first.');
       return;
     }
-    State.player.world.homeX = px;
-    State.player.world.homeY = Math.max(110, py - 100);
-    Net.placeHome(State.player.world.homeX, State.player.world.homeY);
-    UI.toast('Your home has been placed here.');
+    const placement = World3D.canPlaceHome(house, px, py);
+    if (!placement.ok) return UI.toast(placement.message);
+    Net.placeHome(px, py, result => {
+      if (!result?.ok) return UI.toast(result?.error || 'Could not place your house.');
+      State.player.world.homeX = px;
+      State.player.world.homeY = py;
+      State.player.world.homePlaced = true;
+      UI.toast('Your brick-built house is placed on the grass.');
+    });
+  }
+
+  function updateVehicleButton(vehicle) {
+    const button = document.getElementById('toggleVehicleBtn');
+    const usable = !!vehicle?.model?.length;
+    button.classList.toggle('hidden', !usable);
+    if (!usable) return;
+    button.textContent = State.player.world.inVehicle ? 'Exit Vehicle (F)' : 'Enter Vehicle (F)';
+  }
+
+  function toggleVehicle() {
+    if (!getVehicleStats(State.player).vehicle?.model?.length) {
+      UI.toast('Choose a brick-built vehicle in My Home first.');
+      return;
+    }
+    const inVehicle = !!State.player.world.inVehicle;
+    Net.setVehicleMode(!inVehicle, result => {
+      if (!result?.ok) return UI.toast(result?.error || 'Could not change vehicle mode.');
+      State.player.world.inVehicle = result.inVehicle;
+      UI.toast(result.inVehicle ? 'You got in your vehicle.' : 'You parked and got out.');
+      UI.renderAll();
+    });
   }
 
   function loop(timestamp) {

@@ -5,6 +5,10 @@ const World3D = (() => {
   const MAP_DEPTH = 160;
   const ROAD_X = [24, 72, 120, 168, 216];
   const ROAD_Z = [22, 70, 118];
+  const MODEL_SCALE = 0.018;
+  const ROAD_HALF_WIDTH_WORLD = 30;
+  const GRASS_CLEARANCE_WORLD = 45;
+  const VEHICLE_CLEARANCE_WORLD = 20;
   let THREE;
   let scene;
   let camera;
@@ -18,6 +22,8 @@ const World3D = (() => {
   const pointer = { current: null };
   const avatars = new Map();
   const homes = new Map();
+  const vehicles = new Map();
+  const buildModels = new Map();
   const shared = {};
 
   async function init(targetCanvas) {
@@ -234,58 +240,14 @@ const World3D = (() => {
     scene.add(group);
   }
 
-  function buildHouses(random) {
-    const bodyColors = ['#e8c98d', '#d9e0cf', '#e4aa7d', '#9fc6c2', '#e9d5cf'];
-    const roofColors = ['#a9503c', '#596e70', '#b97748'];
-    const possible = [];
-    const occupied = [State.player, ...State.onlinePlayers]
-      .filter(player => player && player.world)
-      .map(player => ({ x: player.world.x * SCALE, z: player.world.y * SCALE }));
-    for (let x = 10; x < MAP_WIDTH - 8; x += 20) {
-      for (let z = 10; z < MAP_DEPTH - 8; z += 18) {
-        const playerNearby = occupied.some(position => Math.hypot(x - position.x, z - position.z) < 13);
-        if (!playerNearby && !nearRoad(x, z, 8) && random() < 0.62) possible.push({ x, z });
-      }
-    }
-    possible.forEach(({ x, z }, index) => {
-      const group = new THREE.Group();
-      const bodyMaterial = new THREE.MeshStandardMaterial({ color: bodyColors[index % bodyColors.length], roughness: 0.9 });
-      const roofMaterial = new THREE.MeshStandardMaterial({ color: roofColors[index % roofColors.length], roughness: 0.87 });
-      const body = new THREE.Mesh(new THREE.BoxGeometry(4.9, 2.9, 4.5), bodyMaterial);
-      body.position.y = 1.55;
-      body.castShadow = true;
-      body.receiveShadow = true;
-      group.add(body);
-      const roof = new THREE.Mesh(new THREE.ConeGeometry(3.9, 2.25, 4), roofMaterial);
-      roof.rotation.y = Math.PI / 4;
-      roof.position.y = 4.05;
-      roof.castShadow = true;
-      group.add(roof);
-      const door = new THREE.Mesh(new THREE.BoxGeometry(0.72, 1.55, 0.13), shared.door);
-      door.position.set(0, 0.85, 2.32);
-      group.add(door);
-      [-1.25, 1.25].forEach(side => {
-        const window = new THREE.Mesh(new THREE.BoxGeometry(0.72, 0.7, 0.12), shared.window);
-        window.position.set(side, 1.8, 2.34);
-        group.add(window);
-      });
-      const step = new THREE.Mesh(new THREE.BoxGeometry(1.5, 0.18, 0.55), shared.sidewalk);
-      step.position.set(0, 0.15, 2.72);
-      group.add(step);
-      group.position.set(x, 0, z);
-      scene.add(group);
-    });
-    return possible;
-  }
-
-  function addTreesAndShrubs(random, houseLots) {
+  function addTreesAndShrubs(random) {
     const trees = [];
     const shrubs = [];
     for (let x = 6; x < MAP_WIDTH - 5; x += 7.5) {
       for (let z = 6; z < MAP_DEPTH - 5; z += 7) {
         const tx = x + (random() - 0.5) * 4;
         const tz = z + (random() - 0.5) * 3;
-        if (nearRoad(tx, tz, 7.2) || houseLots.some(lot => Math.hypot(tx - lot.x, tz - lot.z) < 7)) continue;
+        if (nearRoad(tx, tz, 7.2)) continue;
         if (random() < 0.58) trees.push({ x: tx, z: tz, scale: 0.72 + random() * 0.58, shade: random() });
         else if (random() < 0.85) shrubs.push({ x: tx, z: tz, scale: 0.65 + random() * 0.75, shade: random() });
       }
@@ -405,8 +367,7 @@ const World3D = (() => {
     addRoads();
     addParks();
     const random = seededRandom();
-    const houseLots = buildHouses(random);
-    addTreesAndShrubs(random, houseLots);
+    addTreesAndShrubs(random);
     addGardenDetails(random);
   }
 
@@ -511,11 +472,7 @@ const World3D = (() => {
     halo.rotation.x = -Math.PI / 2;
     halo.position.y = 0.035;
     root.add(halo);
-    const vehicle = makeVehicle();
-    vehicle.position.set(0.95, 0, 0.25);
-    vehicle.visible = !!player.vehicle;
-    root.add(vehicle);
-    root.userData.parts = { legs, leftArm, rightArm, bodyMaterial, legMaterial, vehicle };
+    root.userData.parts = { legs, leftArm, rightArm, bodyMaterial, legMaterial };
     root.traverse(object => {
       if (object.isMesh) object.userData.playerId = local ? null : id;
     });
@@ -523,39 +480,14 @@ const World3D = (() => {
     return root;
   }
 
-  function makeVehicle() {
-    const group = new THREE.Group();
-    const shell = new THREE.MeshStandardMaterial({ color: '#e6a82d', roughness: 0.55, metalness: 0.08 });
-    const glass = new THREE.MeshStandardMaterial({ color: '#8dcbd3', roughness: 0.28, metalness: 0.12 });
-    const tire = new THREE.MeshStandardMaterial({ color: '#30373b', roughness: 0.9 });
-    const base = new THREE.Mesh(new THREE.BoxGeometry(1.25, 0.35, 1.65), shell);
-    base.position.y = 0.48;
-    base.castShadow = true;
-    group.add(base);
-    const hood = new THREE.Mesh(new THREE.BoxGeometry(1.05, 0.28, 0.5), shell);
-    hood.position.set(0, 0.7, 0.58);
-    group.add(hood);
-    const windshield = new THREE.Mesh(new THREE.BoxGeometry(0.8, 0.42, 0.08), glass);
-    windshield.position.set(0, 0.83, -0.13);
-    group.add(windshield);
-    [-0.62, 0.62].forEach(x => [-0.5, 0.5].forEach(z => {
-      const wheel = new THREE.Mesh(new THREE.CylinderGeometry(0.25, 0.25, 0.16, 10), tire);
-      wheel.rotation.z = Math.PI / 2;
-      wheel.position.set(x, 0.33, z);
-      group.add(wheel);
-    }));
-    group.traverse(object => { if (object.isMesh) object.castShadow = true; });
-    return group;
-  }
-
   function refreshAvatar(root, player, x, z, facing, moving, phase) {
     const tier = getTierInfo(player);
     root.position.set(x * SCALE, 0, z * SCALE);
     root.rotation.y = facing < 0 ? -Math.PI / 2 : Math.PI / 2;
     const parts = root.userData.parts;
+    root.visible = !player.world?.inVehicle;
     parts.bodyMaterial.color.set(tier.bodyColor);
     parts.legMaterial.color.set(tier.legColor);
-    parts.vehicle.visible = !!player.vehicle;
     const swing = moving ? Math.sin(phase) * 0.48 : 0;
     parts.legs[0].rotation.x = swing;
     parts.legs[1].rotation.x = -swing;
@@ -563,38 +495,134 @@ const World3D = (() => {
     parts.rightArm.rotation.x = swing * 0.72;
   }
 
-  function createHome(id, player) {
-    const group = new THREE.Group();
-    const palettes = ['#d9bb88', '#b9d0c0', '#e1ae88', '#b5c7d8'];
-    let hash = 0;
-    String(id).split('').forEach(char => { hash = (hash * 31 + char.charCodeAt(0)) >>> 0; });
-    const wall = new THREE.MeshStandardMaterial({ color: palettes[hash % palettes.length], roughness: 0.9 });
-    const roof = new THREE.MeshStandardMaterial({ color: ['#a64f40', '#657a76', '#b57c49'][hash % 3], roughness: 0.84 });
-    const body = new THREE.Mesh(new THREE.BoxGeometry(5.6, 3.5, 5.1), wall);
-    body.position.y = 1.9;
-    body.castShadow = true;
-    body.receiveShadow = true;
-    group.add(body);
-    const roofMesh = new THREE.Mesh(new THREE.ConeGeometry(4.5, 2.6, 4), roof);
-    roofMesh.rotation.y = Math.PI / 4;
-    roofMesh.position.y = 4.9;
-    roofMesh.castShadow = true;
-    group.add(roofMesh);
-    const door = new THREE.Mesh(new THREE.BoxGeometry(0.82, 1.85, 0.14), shared.door);
-    door.position.set(0, 1.02, 2.62);
-    group.add(door);
-    [-1.5, 1.5].forEach(side => {
-      const window = new THREE.Mesh(new THREE.BoxGeometry(0.88, 0.76, 0.13), shared.window);
-      window.position.set(side, 2.05, 2.64);
-      group.add(window);
+  function buildBounds(build) {
+    if (!build?.model?.length) return null;
+    let minX = Infinity, minZ = Infinity, maxX = -Infinity, maxZ = -Infinity;
+    build.model.forEach(brick => {
+      const part = Parts.BY_ID[brick.partId];
+      if (!part) return;
+      const footprint = Parts.footprint(brick);
+      minX = Math.min(minX, brick.x);
+      minZ = Math.min(minZ, brick.z);
+      maxX = Math.max(maxX, brick.x + footprint.w);
+      maxZ = Math.max(maxZ, brick.z + footprint.d);
     });
-    const porch = new THREE.Mesh(new THREE.BoxGeometry(2.2, 0.2, 1.4), shared.sidewalk);
-    porch.position.set(0, 0.16, 3.05);
-    group.add(porch);
-    group.userData.playerId = id;
-    group.traverse(object => { if (object.isMesh) object.castShadow = true; });
-    scene.add(group);
-    return group;
+    return Number.isFinite(minX) ? { minX, minZ, maxX, maxZ } : null;
+  }
+
+  function createBrickModel(build) {
+    if (!build?.model?.length) return null;
+    const cacheKey = build.id || build.name;
+    let template = buildModels.get(cacheKey);
+    if (!template) {
+      const occupied = new Set(build.model.flatMap(brick => Parts.cells(brick)));
+      const faces = build.model.flatMap(brick => Parts.faces(brick, {
+        covered(dx, dz) {
+          const part = Parts.BY_ID[brick.partId];
+          const [worldX, worldZ] = Parts.localColumnToWorld(brick, dx, dz);
+          return occupied.has(`${worldX},${brick.y + part.h},${worldZ}`);
+        }
+      }));
+      const vertices = faces.flatMap(face => face.v);
+      if (!vertices.length) return null;
+      const bounds = vertices.reduce((box, vertex) => ({
+        minX: Math.min(box.minX, vertex[0]),
+        minY: Math.min(box.minY, vertex[1]),
+        minZ: Math.min(box.minZ, vertex[2]),
+        maxX: Math.max(box.maxX, vertex[0]),
+        maxZ: Math.max(box.maxZ, vertex[2])
+      }), { minX: Infinity, minY: Infinity, minZ: Infinity, maxX: -Infinity, maxZ: -Infinity });
+      const { minX, minY, minZ, maxX, maxZ } = bounds;
+      const byColor = new Map();
+      faces.forEach(face => {
+        if (face.a !== undefined && face.a < 1) return;
+        const color = face.c || '#9aa3ae';
+        const positions = byColor.get(color) || [];
+        for (let index = 1; index < face.v.length - 1; index++) {
+          [face.v[0], face.v[index], face.v[index + 1]].forEach(vertex => {
+            positions.push(
+              (vertex[0] - (minX + maxX) / 2) * MODEL_SCALE,
+              (vertex[1] - minY) * MODEL_SCALE,
+              (vertex[2] - (minZ + maxZ) / 2) * MODEL_SCALE
+            );
+          });
+        }
+        byColor.set(color, positions);
+      });
+      template = new THREE.Group();
+      byColor.forEach((positions, color) => {
+        const geometry = new THREE.BufferGeometry();
+        geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+        geometry.computeVertexNormals();
+        const material = new THREE.MeshStandardMaterial({ color, roughness: 0.52, metalness: 0.04 });
+        const mesh = new THREE.Mesh(geometry, material);
+        mesh.castShadow = true;
+        mesh.receiveShadow = true;
+        template.add(mesh);
+      });
+      buildModels.set(cacheKey, template);
+    }
+    return template.clone(true);
+  }
+
+  function roadDistanceWorld(x, z) {
+    const xRoads = ROAD_X.map(value => value / SCALE);
+    const zRoads = ROAD_Z.map(value => value / SCALE);
+    return Math.min(...xRoads.map(value => Math.abs(x - value)), ...zRoads.map(value => Math.abs(z - value)));
+  }
+
+  function isVehicleRoad(x, z) {
+    return roadDistanceWorld(x, z) <= VEHICLE_CLEARANCE_WORLD;
+  }
+
+  function canPlaceHome(build, x, z) {
+    const bounds = buildBounds(build);
+    if (!bounds) return { ok: false, message: 'This creation has no brick model to place.' };
+    const halfWidth = ((bounds.maxX - bounds.minX) * Parts.STUD * MODEL_SCALE / SCALE) / 2;
+    const halfDepth = ((bounds.maxZ - bounds.minZ) * Parts.STUD * MODEL_SCALE / SCALE) / 2;
+    const xRoads = ROAD_X.map(value => value / SCALE);
+    const zRoads = ROAD_Z.map(value => value / SCALE);
+    if (xRoads.some(road => Math.abs(x - road) <= GRASS_CLEARANCE_WORLD + halfWidth) ||
+        zRoads.some(road => Math.abs(z - road) <= GRASS_CLEARANCE_WORLD + halfDepth)) {
+      return { ok: false, message: 'That house would overlap a road or sidewalk. Find a wider patch of grass.' };
+    }
+    if (x - halfWidth < 85 || x + halfWidth > MAP_WIDTH / SCALE - 85 || z - halfDepth < 85 || z + halfDepth > MAP_DEPTH / SCALE - 85) {
+      return { ok: false, message: 'The whole house must fit on the grass inside the town.' };
+    }
+    return { ok: true };
+  }
+
+  function isPlacedHome(player) {
+    return !!player.house && !!player.world && (
+      player.world.homePlaced === true ||
+      (player.world.homePlaced === undefined && (player.world.homeX !== 125 || player.world.homeY !== 155))
+    );
+  }
+
+  function updateVehicle(id, player, x, z, facing, shouldShow) {
+    let entry = vehicles.get(id);
+    if (!shouldShow || !player.vehicle?.model?.length) {
+      if (entry) {
+        scene.remove(entry.group);
+        vehicles.delete(id);
+      }
+      return;
+    }
+    if (!entry || entry.buildId !== player.vehicle.id) {
+      if (entry) scene.remove(entry.group);
+      const group = createBrickModel(player.vehicle);
+      if (!group) {
+        vehicles.delete(id);
+        return;
+      }
+      entry = { buildId: player.vehicle.id, group };
+      entry.group.userData.playerId = id === '__local__' ? null : id;
+      entry.group.traverse(object => { if (object.isMesh) object.userData.playerId = id === '__local__' ? null : id; });
+      vehicles.set(id, entry);
+      scene.add(group);
+    }
+    entry.group.position.set(x * SCALE, 0, z * SCALE);
+    entry.group.rotation.y = facing < 0 ? -Math.PI / 2 : Math.PI / 2;
   }
 
   function playerAt(event) {
@@ -605,7 +633,10 @@ const World3D = (() => {
       -((event.clientY - rect.top) / rect.height) * 2 + 1
     );
     raycaster.current.setFromCamera(pointer.current, camera);
-    const remoteGroups = [...avatars.entries()].filter(([id]) => id !== '__local__').map(([, group]) => group);
+    const remoteGroups = [
+      ...[...avatars.entries()].filter(([id]) => id !== '__local__').map(([, group]) => group),
+      ...[...vehicles.entries()].filter(([id]) => id !== '__local__').map(([, entry]) => entry.group)
+    ];
     const hits = raycaster.current.intersectObjects(remoteGroups, true);
     return hits.find(hit => hit.object.userData.playerId)?.object.userData.playerId || null;
   }
@@ -638,21 +669,40 @@ const World3D = (() => {
     const residents = [localPlayer, ...remotePlayers.map(entry => entry.player)];
     const liveHomes = new Set();
     residents.forEach(player => {
-      if (!player.house || !player.world || !Number.isFinite(player.world.homeX) || !Number.isFinite(player.world.homeY)) return;
+      if (!isPlacedHome(player) || !Number.isFinite(player.world.homeX) || !Number.isFinite(player.world.homeY)) return;
       liveHomes.add(player.id);
       let home = homes.get(player.id);
-      if (!home) {
-        home = createHome(player.id, player);
+      if (!home || home.buildId !== player.house.id) {
+        if (home) scene.remove(home.group);
+        const group = createBrickModel(player.house);
+        if (!group) {
+          homes.delete(player.id);
+          return;
+        }
+        home = { buildId: player.house.id, group };
         homes.set(player.id, home);
+        scene.add(group);
       }
-      home.position.set(player.world.homeX * SCALE, 0, player.world.homeY * SCALE);
+      home.group.position.set(player.world.homeX * SCALE, 0, player.world.homeY * SCALE);
     });
     for (const [id, home] of homes) {
       if (!liveHomes.has(id)) {
-        scene.remove(home);
+        scene.remove(home.group);
         homes.delete(id);
       }
     }
+
+    updateVehicle('__local__', localPlayer,
+      localPlayer.world.inVehicle ? px : localPlayer.world.vehicleX,
+      localPlayer.world.inVehicle ? py : localPlayer.world.vehicleY,
+      facing, !!localPlayer.world.inVehicle || !!localPlayer.world.vehicleParked);
+    remotePlayers.forEach(({ player, x, z, facing: direction }) => {
+      const inVehicle = !!player.world.inVehicle;
+      updateVehicle(player.id, player,
+        inVehicle ? x : player.world.vehicleX,
+        inVehicle ? z : player.world.vehicleY,
+        direction, inVehicle || !!player.world.vehicleParked);
+    });
 
     camera.position.set(localX + 15, 18.5, localZ + 20);
     camera.lookAt(localX, 0.7, localZ);
@@ -720,6 +770,6 @@ const World3D = (() => {
     hudContext.fillText(`${player.name}  ${Math.round(distance * 10)}m`, ax, ay + 18);
   }
 
-  return { init, playerAt, updateScene };
+  return { init, playerAt, updateScene, isVehicleRoad, canPlaceHome };
 })();
 globalThis.World3D = World3D;

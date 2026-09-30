@@ -130,11 +130,13 @@ const Home = (() => {
     State.player.vehicleBuildId = id;
     Net.syncPlayer();
     UI.renderAll();
-    UI.toast('🚗 Hop in! You move faster in the World now.');
+    UI.toast('🚗 Head to a road and press F to get in.');
   }
 
   function park() {
     State.player.vehicleBuildId = null;
+    State.player.world.inVehicle = false;
+    State.player.world.vehicleParked = false;
     Net.syncPlayer();
     UI.renderAll();
   }

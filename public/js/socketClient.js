@@ -1,5 +1,19 @@
 const Net = (() => {
   let socket;
+  let worldAssetsByPlayer = new Map();
+
+  function mergeWorldAssets() {
+    State.onlinePlayers.forEach(player => {
+      const assets = worldAssetsByPlayer.get(player.id);
+      if (!assets) {
+        player.house = null;
+        player.vehicle = null;
+        return;
+      }
+      player.house = player.house?.id === assets.house?.id ? assets.house : null;
+      player.vehicle = player.vehicle?.id === assets.vehicle?.id ? assets.vehicle : null;
+    });
+  }
 
   function init(onReady) {
     socket = io();
@@ -38,12 +52,19 @@ const Net = (() => {
 
     socket.on('onlinePlayers', players => {
       State.onlinePlayers = players;
+      mergeWorldAssets();
       UI.renderOnlinePlayers();
     });
 
     socket.on('worldPlayers', players => {
       State.onlinePlayers = players;
+      mergeWorldAssets();
       UI.renderOnlinePlayers();
+    });
+
+    socket.on('worldAssets', assets => {
+      worldAssetsByPlayer = new Map(assets.map(player => [player.id, player]));
+      mergeWorldAssets();
     });
 
     socket.on('itemSold', data => {
@@ -119,8 +140,12 @@ const Net = (() => {
     socket.emit('worldMove', { x, y });
   }
 
-  function placeHome(x, y) {
-    socket.emit('placeHome', { x, y });
+  function placeHome(x, y, callback) {
+    socket.emit('placeHome', { x, y }, callback);
+  }
+
+  function setVehicleMode(inVehicle, callback) {
+    socket.emit('vehicleMode', { inVehicle }, callback);
   }
 
   const send = (event, payload) => socket.emit(event, payload);
@@ -140,5 +165,5 @@ const Net = (() => {
     partyHit: mode => send('partyHit', { mode })
   };
 
-  return { init, syncPlayer, buyItem, listBuild, cancelListing, buyListing, moveWorld, placeHome, social };
+  return { init, syncPlayer, buyItem, listBuild, cancelListing, buyListing, moveWorld, placeHome, setVehicleMode, social };
 })();

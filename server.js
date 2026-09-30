@@ -21,6 +21,21 @@ const PUBLIC_DIR = path.join(__dirname, 'public');
 const CATALOG_FILE = path.join(PUBLIC_DIR, 'data', 'catalog.json');
 const WORLD_WIDTH = 2400;
 const WORLD_HEIGHT = 1600;
+const WORLD_ROAD_X = [240, 720, 1200, 1680, 2160];
+const WORLD_ROAD_Y = [220, 700, 1180];
+const SIDEWALK_HALF_WIDTH = 45;
+const VEHICLE_ROAD_HALF_WIDTH = 20;
+
+function roadDistance(x, y) {
+  return Math.min(
+    ...WORLD_ROAD_X.map(roadX => Math.abs(x - roadX)),
+    ...WORLD_ROAD_Y.map(roadY => Math.abs(y - roadY))
+  );
+}
+
+function isGrassPosition(x, y) {
+  return roadDistance(x, y) > SIDEWALK_HALF_WIDTH;
+}
 
 app.set('trust proxy', 1);
 app.use('/vendor/three', express.static(path.join(__dirname, 'node_modules', 'three', 'build')));
@@ -265,7 +280,7 @@ function newPlayer(id, name) {
     builtItems: [],
     home: { houseBuildId: null, art: [], furniture: [] },
     vehicleBuildId: null,
-    world: { x: 400, y: 300, homeX: 125, homeY: 155 },
+    world: { x: 400, y: 300, homeX: 125, homeY: 155, homePlaced: false, inVehicle: false, vehicleParked: false },
     hunt: { level: 1, runCred: 0, inFight: false },
     friends: [],
     friendRequests: [],
@@ -311,8 +326,27 @@ function onlineList() {
         name: p.name,
         lifetimeCred: p.lifetimeCred,
         world: p.world || { x: 400, y: 300, homeX: 125, homeY: 155 },
-        house: house ? { name: house.name, thumbnail: house.thumbnail } : null,
-        vehicle: vehicle ? { thumbnail: vehicle.thumbnail } : null
+        house: house && p.world && (p.world.homePlaced === true ||
+          (p.world.homePlaced === undefined && (p.world.homeX !== 125 || p.world.homeY !== 155)))
+          ? { id: house.id, name: house.name }
+          : null,
+        vehicle: vehicle ? { id: vehicle.id, name: vehicle.name } : null
+      };
+    });
+}
+
+function worldAssets() {
+  return Object.values(db.players)
+    .filter(p => p.online)
+    .map(p => {
+      const house = (p.builtItems || []).find(b => b.id === p.home?.houseBuildId);
+      const vehicle = (p.builtItems || []).find(b => b.id === p.vehicleBuildId);
+      const placed = !!p.world && (p.world.homePlaced === true ||
+        (p.world.homePlaced === undefined && (p.world.homeX !== 125 || p.world.homeY !== 155)));
+      return {
+        id: p.id,
+        house: house && placed ? { ...house, model: house.model || [] } : null,
+        vehicle: vehicle ? { ...vehicle, model: vehicle.model || [] } : null
       };
     });
 }
@@ -350,6 +384,7 @@ io.on('connection', socket => {
     });
 
     io.to('lobby').emit('onlinePlayers', onlineList());
+    io.to('lobby').emit('worldAssets', worldAssets());
     social.onJoin(id);
   });
 
@@ -365,8 +400,17 @@ io.on('connection', socket => {
     if (patch.inventory) p.inventory = patch.inventory;
     if (patch.equipped) p.equipped = patch.equipped;
     if (patch.builtItems) p.builtItems = patch.builtItems;
-    if (patch.home) p.home = patch.home;
-    if (patch.vehicleBuildId !== undefined) p.vehicleBuildId = patch.vehicleBuildId;
+    if (patch.home) {
+      p.home = patch.home;
+      if (!p.home.houseBuildId && p.world) p.world.homePlaced = false;
+    }
+    if (patch.vehicleBuildId !== undefined) {
+      p.vehicleBuildId = patch.vehicleBuildId;
+      if (!p.vehicleBuildId && p.world) {
+        p.world.inVehicle = false;
+        p.world.vehicleParked = false;
+      }
+    }
     if (patch.hunt && typeof patch.hunt === 'object') {
       const level = Math.round(Number(patch.hunt.level));
       const runCred = Math.round(Number(patch.hunt.runCred));
@@ -379,27 +423,80 @@ io.on('connection', socket => {
       if (p.hunt.level !== before) social.onHuntChanged(p.id);
     }
     scheduleSave([p.id]);
+    io.to('lobby').emit('onlinePlayers', onlineList());
+    io.to('lobby').emit('worldAssets', worldAssets());
   });
 
   socket.on('worldMove', ({ x, y }) => {
     const p = db.players[socket.currentPlayerId];
     if (!p || !Number.isFinite(x) || !Number.isFinite(y)) return;
     p.world = p.world || { homeX: 125, homeY: 155 };
-    p.world.x = Math.max(40, Math.min(WORLD_WIDTH - 40, Math.round(x)));
-    p.world.y = Math.max(40, Math.min(WORLD_HEIGHT - 40, Math.round(y)));
+    const nextX = Math.max(40, Math.min(WORLD_WIDTH - 40, Math.round(x)));
+    const nextY = Math.max(40, Math.min(WORLD_HEIGHT - 40, Math.round(y)));
+    if (p.world.inVehicle && roadDistance(nextX, nextY) > VEHICLE_ROAD_HALF_WIDTH) return;
+    p.world.x = nextX;
+    p.world.y = nextY;
+    if (p.world.inVehicle) {
+      p.world.vehicleX = nextX;
+      p.world.vehicleY = nextY;
+    }
     scheduleSave([p.id]);
     socket.to('lobby').volatile.emit('worldPlayers', onlineList());
   });
 
-  socket.on('placeHome', ({ x, y }) => {
+  socket.on('placeHome', ({ x, y } = {}, ack) => {
     const p = db.players[socket.currentPlayerId];
     const house = p && (p.builtItems || []).find(b => b.id === p.home?.houseBuildId);
-    if (!p || !house || !Number.isFinite(x) || !Number.isFinite(y)) return;
+    if (!p || !house || !Array.isArray(house.model) || !house.model.length) {
+      if (typeof ack === 'function') ack({ error: 'Choose a brick-built house first.' });
+      return;
+    }
+    if (!Number.isFinite(x) || !Number.isFinite(y) || x < 85 || x > WORLD_WIDTH - 85 || y < 85 || y > WORLD_HEIGHT - 85 || !isGrassPosition(x, y)) {
+      if (typeof ack === 'function') ack({ error: 'Place your house on a clear patch of grass, away from roads and sidewalks.' });
+      return;
+    }
     p.world = p.world || { x: 400, y: 300 };
     p.world.homeX = Math.max(85, Math.min(WORLD_WIDTH - 85, Math.round(x)));
     p.world.homeY = Math.max(85, Math.min(WORLD_HEIGHT - 85, Math.round(y)));
+    p.world.homePlaced = true;
     scheduleSave([p.id]);
     io.to('lobby').emit('worldPlayers', onlineList());
+    io.to('lobby').emit('worldAssets', worldAssets());
+    if (typeof ack === 'function') ack({ ok: true });
+  });
+
+  socket.on('vehicleMode', ({ inVehicle } = {}, ack) => {
+    const p = db.players[socket.currentPlayerId];
+    const vehicle = p && (p.builtItems || []).find(b => b.id === p.vehicleBuildId);
+    if (!p || !p.world || typeof inVehicle !== 'boolean') return;
+    if (inVehicle) {
+      if (!vehicle || !Array.isArray(vehicle.model) || !vehicle.model.length) {
+        if (typeof ack === 'function') ack({ error: 'Choose a brick-built vehicle in My Home first.' });
+        return;
+      }
+      if (roadDistance(p.world.x, p.world.y) > VEHICLE_ROAD_HALF_WIDTH) {
+        if (typeof ack === 'function') ack({ error: 'Move onto a road before getting in.' });
+        return;
+      }
+      if (p.world.vehicleParked && Math.hypot(p.world.x - p.world.vehicleX, p.world.y - p.world.vehicleY) > 70) {
+        if (typeof ack === 'function') ack({ error: 'Walk closer to your parked vehicle first.' });
+        return;
+      }
+      p.world.vehicleParked = false;
+      p.world.inVehicle = true;
+      p.world.vehicleX = p.world.x;
+      p.world.vehicleY = p.world.y;
+    } else {
+      if (!p.world.inVehicle) return;
+      p.world.inVehicle = false;
+      p.world.vehicleParked = true;
+      p.world.vehicleX = p.world.x;
+      p.world.vehicleY = p.world.y;
+    }
+    scheduleSave([p.id]);
+    socket.emit('playerUpdated', publicPlayer(p));
+    io.to('lobby').emit('worldPlayers', onlineList());
+    if (typeof ack === 'function') ack({ ok: true, inVehicle: p.world.inVehicle });
   });
 
   socket.on('buyItem', ({ itemId, kind }) => {
