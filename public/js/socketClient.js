@@ -79,7 +79,10 @@ const Net = (() => {
 
     socket.on('social', data => {
       State.social = data;
-      if (State.player) Social.render();
+      if (State.player) {
+        Social.render();
+        Battle.render();
+      }
     });
 
     socket.on('party', party => {
