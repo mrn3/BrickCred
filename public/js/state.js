@@ -1,6 +1,7 @@
 const State = {
   playerId: null,
   player: null,
+  account: null,
   catalog: null,
   listings: [],
   onlinePlayers: [],

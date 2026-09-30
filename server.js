@@ -125,7 +125,7 @@ function accountInfo(userId) {
   const user = store.getUserById(userId);
   const player = db.players[userId];
   if (!user || !player) return null;
-  return { id: user.id, username: user.username, email: user.email, name: player.name };
+  return { id: user.id, username: user.username, email: user.email, name: player.name, hasPassword: !!user.password_hash };
 }
 
 app.get('/api/config', (req, res) => {
@@ -137,6 +137,62 @@ app.get('/api/me', (req, res) => {
   const info = userId && accountInfo(userId);
   if (!info) return res.status(401).json({ error: 'Not signed in.' });
   res.json({ user: info });
+});
+
+app.post('/api/profile', rateLimit, (req, res) => {
+  const userId = sessionUserId(req.headers.cookie);
+  const user = userId && store.getUserById(userId);
+  const player = userId && db.players[userId];
+  if (!user || !player) return res.status(401).json({ error: 'Not signed in.' });
+
+  const name = typeof req.body?.name === 'string' ? req.body.name.trim() : '';
+  const username = typeof req.body?.username === 'string' ? req.body.username.trim() : '';
+  if (!name || name.length > 24 || /[\u0000-\u001f\u007f]/.test(name)) {
+    return res.status(400).json({ error: 'Display name must be 1-24 characters.' });
+  }
+  if (username && !USERNAME_RE.test(username)) {
+    return res.status(400).json({ error: 'Username must be 3-20 letters, numbers, _ or -.' });
+  }
+  if (username) {
+    const existing = store.getUserByUsername(username);
+    if (existing && existing.id !== userId) return res.status(409).json({ error: 'That username is taken.' });
+    try {
+      store.updateUsername(userId, username);
+    } catch (error) {
+      if (error.code === 'SQLITE_CONSTRAINT_UNIQUE') return res.status(409).json({ error: 'That username is taken.' });
+      throw error;
+    }
+  }
+
+  player.name = name;
+  scheduleSave([userId]);
+  io.to('lobby').emit('onlinePlayers', onlineList());
+  res.json({ user: accountInfo(userId) });
+});
+
+app.post('/api/password', rateLimit, (req, res) => {
+  const userId = sessionUserId(req.headers.cookie);
+  const user = userId && store.getUserById(userId);
+  if (!user) return res.status(401).json({ error: 'Not signed in.' });
+  if (!user.username) return res.status(400).json({ error: 'Set a username before adding a password.' });
+  const { currentPassword, newPassword } = req.body || {};
+  if (user.password_hash && (typeof currentPassword !== 'string' || !verifyPassword(currentPassword, user.password_hash))) {
+    return res.status(401).json({ error: 'Current password is incorrect.' });
+  }
+  if (typeof newPassword !== 'string' || newPassword.length < 8 || newPassword.length > 200) {
+    return res.status(400).json({ error: 'Password must be 8-200 characters.' });
+  }
+  store.updatePasswordHash(userId, hashPassword(newPassword));
+  const token = parseCookies(req.headers.cookie)[SESSION_COOKIE];
+  if (token) {
+    const currentTokenHash = sha256(token);
+    store.deleteOtherSessions(userId, currentTokenHash);
+    for (const socket of io.sockets.sockets.values()) {
+      const socketToken = parseCookies(socket.handshake.headers.cookie)[SESSION_COOKIE];
+      if (socket.currentPlayerId === userId && socketToken !== token) socket.disconnect(true);
+    }
+  }
+  res.json({ user: accountInfo(userId) });
 });
 
 app.post('/api/register', rateLimit, (req, res) => {

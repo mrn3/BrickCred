@@ -46,11 +46,14 @@ const stmts = {
   userById: sql.prepare('SELECT * FROM users WHERE id = ?'),
   userByUsername: sql.prepare('SELECT * FROM users WHERE username = ?'),
   userByGoogle: sql.prepare('SELECT * FROM users WHERE google_sub = ?'),
+  updateUsername: sql.prepare('UPDATE users SET username = ? WHERE id = ?'),
+  updatePasswordHash: sql.prepare('UPDATE users SET password_hash = ? WHERE id = ?'),
   insertUser: sql.prepare(`INSERT INTO users (id, username, password_hash, google_sub, email, created_at)
     VALUES (@id, @username, @password_hash, @google_sub, @email, @created_at)`),
   insertSession: sql.prepare('INSERT INTO sessions (token_hash, user_id, expires_at) VALUES (?, ?, ?)'),
   sessionUser: sql.prepare('SELECT user_id FROM sessions WHERE token_hash = ? AND expires_at > ?'),
   deleteSession: sql.prepare('DELETE FROM sessions WHERE token_hash = ?'),
+  deleteOtherSessions: sql.prepare('DELETE FROM sessions WHERE user_id = ? AND token_hash != ?'),
   purgeSessions: sql.prepare('DELETE FROM sessions WHERE expires_at <= ?'),
 };
 
@@ -102,8 +105,11 @@ module.exports = {
   getUserById: id => stmts.userById.get(id),
   getUserByUsername: username => stmts.userByUsername.get(username),
   getUserByGoogle: sub => stmts.userByGoogle.get(sub),
+  updateUsername: (id, username) => stmts.updateUsername.run(username, id),
+  updatePasswordHash: (id, passwordHash) => stmts.updatePasswordHash.run(passwordHash, id),
   createUser: user => stmts.insertUser.run({ username: null, password_hash: null, google_sub: null, email: null, created_at: Date.now(), ...user }),
   createSession: (tokenHash, userId, expiresAt) => stmts.insertSession.run(tokenHash, userId, expiresAt),
   getSessionUserId: tokenHash => stmts.sessionUser.get(tokenHash, Date.now())?.user_id || null,
   deleteSession: tokenHash => stmts.deleteSession.run(tokenHash),
+  deleteOtherSessions: (userId, currentTokenHash) => stmts.deleteOtherSessions.run(userId, currentTokenHash),
 };

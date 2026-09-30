@@ -13,7 +13,9 @@ document.addEventListener('DOMContentLoaded', () => {
     }, 60000);
   }
 
-  function startGame() {
+  function startGame(account) {
+    State.account = account;
+    initProfile();
     const logoutBtn = document.getElementById('logoutBtn');
     logoutBtn.classList.remove('hidden');
     logoutBtn.addEventListener('click', async () => {
@@ -43,6 +45,83 @@ document.addEventListener('DOMContentLoaded', () => {
     return data;
   }
 
+  function initProfile() {
+    const profileForm = document.getElementById('profileForm');
+    const passwordForm = document.getElementById('passwordForm');
+    const displayName = document.getElementById('profileDisplayName');
+    const username = document.getElementById('profileUsername');
+    const currentPassword = document.getElementById('currentPassword');
+    const newPassword = document.getElementById('newPassword');
+    const confirmPassword = document.getElementById('confirmPassword');
+    const profileError = document.getElementById('profileError');
+    const passwordError = document.getElementById('passwordError');
+    const passwordNote = document.getElementById('passwordNote');
+
+    const render = () => {
+      displayName.value = State.account.name || '';
+      username.value = State.account.username || '';
+      document.getElementById('profileEmail').textContent = State.account.email
+        ? `Account email (managed by your sign-in provider): ${State.account.email}`
+        : 'No email address is attached to this account.';
+      currentPassword.required = State.account.hasPassword;
+      document.getElementById('passwordSave').disabled = !State.account.username;
+      passwordNote.textContent = State.account.hasPassword
+        ? 'Enter your current password to change it.'
+        : State.account.username
+          ? 'No password is set. Choose one to enable username and password sign-in.'
+          : 'Set a username above before adding a password.';
+    };
+
+    profileForm.addEventListener('submit', async event => {
+      event.preventDefault();
+      profileError.textContent = '';
+      const button = document.getElementById('profileSave');
+      button.disabled = true;
+      try {
+        const result = await postJson('/api/profile', {
+          name: displayName.value.trim(),
+          username: username.value.trim()
+        });
+        State.account = result.user;
+        State.player.name = result.user.name;
+        UI.renderAll();
+        render();
+        UI.toast('Profile updated.');
+      } catch (error) {
+        profileError.textContent = error.message;
+      } finally {
+        button.disabled = false;
+      }
+    });
+
+    passwordForm.addEventListener('submit', async event => {
+      event.preventDefault();
+      passwordError.textContent = '';
+      if (newPassword.value !== confirmPassword.value) {
+        passwordError.textContent = 'The new passwords do not match.';
+        return;
+      }
+      const button = document.getElementById('passwordSave');
+      button.disabled = true;
+      try {
+        const result = await postJson('/api/password', {
+          currentPassword: currentPassword.value,
+          newPassword: newPassword.value
+        });
+        State.account = result.user;
+        passwordForm.reset();
+        render();
+        UI.toast('Password updated.');
+      } catch (error) {
+        passwordError.textContent = error.message;
+      } finally {
+        button.disabled = false;
+      }
+    });
+
+    render();
+  }
+
   function showAuth() {
     const modal = document.getElementById('authModal');
     const form = document.getElementById('authForm');
@@ -59,9 +138,9 @@ document.addEventListener('DOMContentLoaded', () => {
       localStorage.removeItem('lego_player_name');
     };
 
-    const finish = () => {
+    const finish = account => {
       modal.classList.add('hidden');
-      startGame();
+      startGame(account);
     };
 
     document.querySelectorAll('.auth-tab').forEach(tab => {
@@ -81,9 +160,9 @@ document.addEventListener('DOMContentLoaded', () => {
       try {
         const body = { username: username.value.trim(), password: password.value };
         if (mode === 'register') body.legacyId = legacyId;
-        await postJson(mode === 'login' ? '/api/login' : '/api/register', body);
+        const result = await postJson(mode === 'login' ? '/api/login' : '/api/register', body);
         if (mode === 'register') clearLegacy();
-        finish();
+        finish(result.user);
       } catch (err) {
         error.textContent = err.message;
       } finally {
@@ -102,9 +181,9 @@ document.addEventListener('DOMContentLoaded', () => {
           callback: async ({ credential }) => {
             error.textContent = '';
             try {
-              await postJson('/api/google', { credential, legacyId });
+              const result = await postJson('/api/google', { credential, legacyId });
               clearLegacy();
-              finish();
+              finish(result.user);
             } catch (err) {
               error.textContent = err.message;
             }
@@ -120,5 +199,9 @@ document.addEventListener('DOMContentLoaded', () => {
     username.focus();
   }
 
-  fetch('/api/me').then(res => (res.ok ? startGame() : showAuth())).catch(showAuth);
+  fetch('/api/me').then(async res => {
+    if (!res.ok) return showAuth();
+    const result = await res.json();
+    startGame(result.user);
+  }).catch(showAuth);
 });

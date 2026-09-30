@@ -2,9 +2,25 @@ const UI = (() => {
   function showTab(name) {
     document.querySelectorAll('.tab-btn').forEach(b => b.classList.toggle('active', b.dataset.tab === name));
     document.querySelectorAll('.tab-panel').forEach(p => p.classList.toggle('active', p.id === 'tab-' + name));
+    closeMenu();
+  }
+
+  function closeMenu() {
+    const menu = document.getElementById('tabs');
+    const toggle = document.getElementById('menuToggle');
+    menu.classList.remove('open');
+    toggle.setAttribute('aria-expanded', 'false');
+    toggle.setAttribute('aria-label', 'Open navigation menu');
   }
 
   function initTabs() {
+    const menu = document.getElementById('tabs');
+    const toggle = document.getElementById('menuToggle');
+    toggle.addEventListener('click', () => {
+      const isOpen = menu.classList.toggle('open');
+      toggle.setAttribute('aria-expanded', String(isOpen));
+      toggle.setAttribute('aria-label', isOpen ? 'Close navigation menu' : 'Open navigation menu');
+    });
     document.querySelectorAll('.tab-btn').forEach(btn => {
       btn.addEventListener('click', () => {
         if (typeof Battle !== 'undefined' && Battle.isFighting() && btn.dataset.tab !== 'beasthunters') {
@@ -13,6 +29,9 @@ const UI = (() => {
         }
         showTab(btn.dataset.tab);
       });
+    });
+    document.addEventListener('keydown', event => {
+      if (event.key === 'Escape') closeMenu();
     });
   }
 

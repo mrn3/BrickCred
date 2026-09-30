@@ -14,6 +14,9 @@
     <span class="tier-badge" id="tierBadge">Rookie</span>
     <span class="cred-display">💰 <span id="credAmount">0</span> Creds</span>
     <button id="logoutBtn" class="logout-btn hidden">Log Out</button>
+    <button id="menuToggle" class="menu-toggle" type="button" aria-label="Open navigation menu" aria-expanded="false" aria-controls="tabs">
+      <span></span><span></span><span></span>
+    </button>
   </div>
 </header>
 
@@ -25,6 +28,7 @@
   <button class="tab-btn" data-tab="marketplace">Marketplace</button>
   <button class="tab-btn" data-tab="beasthunters">Beast Hunters</button>
   <button class="tab-btn" data-tab="friends">Friends <span id="friendsBadge" class="tab-badge hidden">0</span></button>
+  <button class="tab-btn" data-tab="profile">Profile</button>
 </nav>
 
 <main>
@@ -212,6 +216,32 @@
         <ul id="friendsList" class="social-list"></ul>
       </div>
     </div>
+  </section>
+
+  <section id="tab-profile" class="tab-panel">
+    <h2>Profile</h2>
+    <p id="profileEmail" class="hint"></p>
+    <form id="profileForm" class="profile-form">
+      <label for="profileDisplayName">Display name</label>
+      <input id="profileDisplayName" maxlength="24" autocomplete="nickname" required />
+      <label for="profileUsername">Username</label>
+      <input id="profileUsername" maxlength="20" autocomplete="username" placeholder="Optional for Google sign-in" />
+      <p class="profile-note">Use 3-20 letters, numbers, underscores or hyphens. A username enables password sign-in.</p>
+      <div id="profileError" class="auth-error" role="status"></div>
+      <button id="profileSave" type="submit">Save Profile</button>
+    </form>
+    <form id="passwordForm" class="profile-form password-form">
+      <h3>Password</h3>
+      <label for="currentPassword">Current password</label>
+      <input id="currentPassword" type="password" autocomplete="current-password" />
+      <p id="passwordNote" class="profile-note"></p>
+      <label for="newPassword">New password</label>
+      <input id="newPassword" type="password" minlength="8" maxlength="200" autocomplete="new-password" required />
+      <label for="confirmPassword">Confirm new password</label>
+      <input id="confirmPassword" type="password" minlength="8" maxlength="200" autocomplete="new-password" required />
+      <div id="passwordError" class="auth-error" role="status"></div>
+      <button id="passwordSave" type="submit">Update Password</button>
+    </form>
   </section>
 </main>
 
