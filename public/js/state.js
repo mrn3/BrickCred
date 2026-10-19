@@ -29,6 +29,8 @@ function getCombatStats(player) {
   const tier = getTierInfo(player);
   const equippedWeapons = weaponsById(player.equipped.weapons || []);
   const equippedPowerups = powerupsById(player.equipped.powerups || []);
+  const animals = Animals.equipped(player, State.catalog);
+  const animalAttack = animals.reduce((sum, animal) => sum + animal.attack, 0);
   const homeStats = getHomeStats(player);
   const baseAttack = 5 + tier.bonusAttack;
   let attack = baseAttack + equippedWeapons.reduce((s, w) => s + w.attack, 0);
@@ -44,9 +46,9 @@ function getCombatStats(player) {
     if (p.regen) regen += p.regen;
     if (p.revive) revive += p.revive;
   });
-  attack = Math.round(attack * attackMult);
-  const unarmedAttack = Math.round(baseAttack * attackMult);
-  return { attack, unarmedAttack, health, defense, regen, revive, tier, homeStats };
+  attack = Math.round(attack * attackMult) + animalAttack;
+  const unarmedAttack = Math.round(baseAttack * attackMult) + animalAttack;
+  return { attack, unarmedAttack, animalAttack, animals, health, defense, regen, revive, tier, homeStats };
 }
 
 function findBuild(player, id) {

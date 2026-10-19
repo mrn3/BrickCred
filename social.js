@@ -1,6 +1,7 @@
 // Friends, direct messages, gifts/trades between friends, and co-op Beast Hunter parties.
 const crypto = require('crypto');
 const { LEVELS } = require('./public/js/levels.js');
+const Animals = require('./public/js/animals');
 
 const MAX_PARTY = 4;
 const MAX_LIST = 200;
@@ -50,6 +51,8 @@ module.exports = function attachSocial({ io, db, store, catalog, weaponById, pow
         (p.home.furniture || []).filter(owns).length * 5;
     }
     const baseAttack = 5 + tier.bonusAttack;
+    const animals = Animals.equipped(p, catalog);
+    const animalAttack = animals.reduce((sum, animal) => sum + animal.attack, 0);
     let attack = baseAttack + weapons.reduce((s, w) => s + w.attack, 0);
     let health = 100 + tier.bonusHealth + comfort * 2;
     let defense = 0, attackMult = 1, revive = 0;
@@ -60,8 +63,9 @@ module.exports = function attachSocial({ io, db, store, catalog, weaponById, pow
       if (pu.revive) revive += pu.revive;
     });
     return {
-      attack: Math.round(attack * attackMult),
-      unarmedAttack: Math.round(baseAttack * attackMult),
+      attack: Math.round(attack * attackMult) + animalAttack,
+      unarmedAttack: Math.round(baseAttack * attackMult) + animalAttack,
+      animals,
       hasWeapons: weapons.length > 0,
       health, defense, revive
     };
@@ -124,7 +128,7 @@ module.exports = function attachSocial({ io, db, store, catalog, weaponById, pow
       enemyMax: fight.enemyMax,
       members: Object.entries(fight.members).map(([id, m]) => {
         const p = db.players[id];
-        return { id, name: p ? p.name : '?', lifetimeCred: p ? p.lifetimeCred : 0, hp: Math.max(0, m.hp), max: m.max, weapons: m.weapons, dmg: m.dmg };
+        return { id, name: p ? p.name : '?', lifetimeCred: p ? p.lifetimeCred : 0, hp: Math.max(0, m.hp), max: m.max, weapons: m.weapons, animals: m.animals, dmg: m.dmg };
       }),
       event: event || null
     };
@@ -527,7 +531,7 @@ module.exports = function attachSocial({ io, db, store, catalog, weaponById, pow
         const s = combatStats(m);
         fight.members[id] = {
           hp: s.health, max: s.health, defense: s.defense, revives: s.revive,
-          weapons: s.hasWeapons, lastHit: 0, dmg: 0,
+          weapons: s.hasWeapons, animals: s.animals, lastHit: 0, dmg: 0,
           onRun: ((m.hunt && m.hunt.level) || 1) === lvl.level
         };
       });
@@ -550,6 +554,7 @@ module.exports = function attachSocial({ io, db, store, catalog, weaponById, pow
       if (now - m.lastHit < (weapons ? WEAPON_COOLDOWN : FIST_COOLDOWN) - 60) return;
       m.lastHit = now;
       m.weapons = weapons;
+      m.animals = s.animals;
       const dmg = Math.max(1, Math.round((weapons ? s.attack : s.unarmedAttack) * (0.85 + Math.random() * 0.3)));
       fight.enemyHp -= dmg;
       m.dmg += dmg;

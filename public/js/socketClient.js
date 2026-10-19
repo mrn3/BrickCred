@@ -100,6 +100,8 @@ const Net = (() => {
   function normalizePlayer(p) {
     p.inventory = p.inventory || { weapons: [], powerups: [] };
     p.equipped = p.equipped || { weapons: [], powerups: [] };
+    p.inventory.animals = p.inventory.animals || [];
+    p.equipped.animals = p.equipped.animals || [];
     p.builtItems = p.builtItems || [];
     p.home = p.home || { houseBuildId: null, art: [], furniture: [] };
     p.home.art = p.home.art || [];

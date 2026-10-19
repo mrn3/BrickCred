@@ -80,8 +80,10 @@ const UI = (() => {
   function renderStore() {
     const wEl = document.getElementById('weaponList');
     const pEl = document.getElementById('powerupList');
+    const aEl = document.getElementById('animalList');
     wEl.innerHTML = '';
     pEl.innerHTML = '';
+    aEl.innerHTML = '';
     const tier = getTierInfo(State.player);
 
     State.catalog.weapons.forEach(w => {
@@ -125,22 +127,46 @@ const UI = (() => {
       pEl.appendChild(card);
     });
 
+    State.catalog.animals.forEach(animal => {
+      const owned = State.player.inventory.animals.filter(id => id === animal.id).length;
+      const card = document.createElement('div');
+      card.className = 'item-card';
+      card.innerHTML = `
+        <div class="item-name">${animal.name}</div>
+        <div class="item-stat">Attack +${animal.attack} per hit</div>
+        <div class="item-cost">Creds: ${animal.cost}</div>
+        ${owned ? `<div class="owned-tag">Owned x${owned}</div>` : ''}
+        <button class="buy-btn" data-kind="animal" data-id="${animal.id}">Buy</button>`;
+      addAnimalArt(card, animal);
+      aEl.appendChild(card);
+    });
+
+    aEl.querySelectorAll('.buy-btn').forEach(b => b.addEventListener('click', onBuyItem));
     wEl.querySelectorAll('.buy-btn').forEach(b => b.addEventListener('click', onBuyItem));
     pEl.querySelectorAll('.buy-btn').forEach(b => b.addEventListener('click', onBuyItem));
   }
 
+  function addAnimalArt(card, animal) {
+    const canvas = document.createElement('canvas');
+    canvas.width = 120;
+    canvas.height = 84;
+    canvas.className = 'store-art';
+    canvas.setAttribute('role', 'img');
+    canvas.setAttribute('aria-label', animal.name);
+    Animals.draw(canvas.getContext('2d'), animal, 55, 76);
+    card.prepend(canvas);
+  }
+
   function onBuyItem(e) {
     const { kind, id } = e.target.dataset;
-    const item = kind === 'weapon'
-      ? State.catalog.weapons.find(w => w.id === id)
-      : State.catalog.powerups.find(p => p.id === id);
+    const key = kind === 'weapon' ? 'weapons' : kind === 'animal' ? 'animals' : 'powerups';
+    const item = State.catalog[key].find(item => item.id === id);
     if (State.player.cred < item.cost) {
       toast('Not enough creds!');
       return;
     }
     State.player.cred -= item.cost;
-    if (kind === 'weapon') State.player.inventory.weapons.push(id);
-    else State.player.inventory.powerups.push(id);
+    State.player.inventory[key].push(id);
     Net.buyItem(id, kind);
     Net.syncPlayer();
     renderAll();
@@ -158,7 +184,10 @@ const UI = (() => {
     const eqW = document.getElementById('equippedWeapons');
     const ownedP = document.getElementById('ownedPowerups');
     const eqP = document.getElementById('equippedPowerups');
+    const ownedA = document.getElementById('ownedAnimals');
+    const eqA = document.getElementById('equippedAnimals');
     ownedW.innerHTML = ''; eqW.innerHTML = ''; ownedP.innerHTML = ''; eqP.innerHTML = '';
+    ownedA.innerHTML = ''; eqA.innerHTML = '';
 
     const weaponCounts = countBy(State.player.inventory.weapons);
     Object.entries(weaponCounts).forEach(([id, count]) => {
@@ -198,19 +227,44 @@ const UI = (() => {
       eqP.appendChild(card);
     });
 
-    [[ownedW, 'None yet — visit the Store.'], [ownedP, 'None yet — visit the Store.'], [eqW, 'Nothing equipped.'], [eqP, 'Nothing equipped.']]
+    Object.entries(countBy(State.player.inventory.animals)).forEach(([id, count]) => {
+      const animal = State.catalog.animals.find(a => a.id === id);
+      const equippedCount = State.player.equipped.animals.filter(a => a === id).length;
+      const card = document.createElement('div');
+      card.className = 'item-card';
+      card.innerHTML = `<div class="item-name">${animal.name}</div>
+        <div class="item-stat">Attack +${animal.attack} per hit</div>
+        <div>Owned: ${count} | Equipped: ${equippedCount}</div>
+        <button class="equip-btn" data-kind="animal" data-id="${id}">Equip</button>`;
+      addAnimalArt(card, animal);
+      ownedA.appendChild(card);
+    });
+    State.player.equipped.animals.forEach((id, idx) => {
+      const animal = State.catalog.animals.find(a => a.id === id);
+      const card = document.createElement('div');
+      card.className = 'item-card equipped';
+      card.innerHTML = `<div class="item-name">${animal.name}</div>
+        <div class="item-stat">Attack +${animal.attack} per hit</div>
+        <button class="unequip-btn" data-kind="animal" data-idx="${idx}">Unequip</button>`;
+      addAnimalArt(card, animal);
+      eqA.appendChild(card);
+    });
+
+    [[ownedW, 'None yet — visit the Store.'], [ownedP, 'None yet — visit the Store.'], [ownedA, 'None yet — visit the Store.'], [eqW, 'Nothing equipped.'], [eqP, 'Nothing equipped.'], [eqA, 'No animals equipped.']]
       .forEach(([el, msg]) => { if (!el.children.length) el.innerHTML = `<div class="empty-note">${msg}</div>`; });
 
     ownedW.querySelectorAll('.equip-btn').forEach(b => b.addEventListener('click', onEquip));
     ownedP.querySelectorAll('.equip-btn').forEach(b => b.addEventListener('click', onEquip));
     eqW.querySelectorAll('.unequip-btn').forEach(b => b.addEventListener('click', onUnequip));
     eqP.querySelectorAll('.unequip-btn').forEach(b => b.addEventListener('click', onUnequip));
+    ownedA.querySelectorAll('.equip-btn').forEach(b => b.addEventListener('click', onEquip));
+    eqA.querySelectorAll('.unequip-btn').forEach(b => b.addEventListener('click', onUnequip));
   }
 
   function onEquip(e) {
     const { kind, id } = e.target.dataset;
-    const key = kind === 'weapon' ? 'weapons' : 'powerups';
-    const maxSlots = kind === 'weapon' ? 3 : 2;
+    const key = kind === 'weapon' ? 'weapons' : kind === 'animal' ? 'animals' : 'powerups';
+    const maxSlots = kind === 'weapon' ? 3 : kind === 'animal' ? Animals.MAX_EQUIPPED : 2;
     const owned = State.player.inventory[key].filter(x => x === id).length;
     const equipped = State.player.equipped[key].filter(x => x === id).length;
     if (State.player.equipped[key].length >= maxSlots) {
@@ -228,7 +282,7 @@ const UI = (() => {
 
   function onUnequip(e) {
     const { kind, idx } = e.target.dataset;
-    const key = kind === 'weapon' ? 'weapons' : 'powerups';
+    const key = kind === 'weapon' ? 'weapons' : kind === 'animal' ? 'animals' : 'powerups';
     State.player.equipped[key].splice(Number(idx), 1);
     Net.syncPlayer();
     renderAll();

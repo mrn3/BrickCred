@@ -7,6 +7,7 @@ const { Server } = require('socket.io');
 const { OAuth2Client } = require('google-auth-library');
 const store = require('./db');
 const attachSocial = require('./social');
+const Animals = require('./public/js/animals');
 
 const app = express();
 const server = http.createServer(app);
@@ -49,6 +50,7 @@ app.use(express.json({ limit: '10kb' }));
 const catalog = JSON.parse(fs.readFileSync(CATALOG_FILE, 'utf8'));
 const weaponById = Object.fromEntries(catalog.weapons.map(w => [w.id, w]));
 const powerupById = Object.fromEntries(catalog.powerups.map(p => [p.id, p]));
+const animalById = Object.fromEntries(catalog.animals.map(a => [a.id, a]));
 
 const db = store.loadState();
 const dirtyPlayers = new Set();
@@ -279,8 +281,8 @@ function newPlayer(id, name) {
     name: name || 'Minifig',
     cred: 100,
     lifetimeCred: 100,
-    inventory: { weapons: [], powerups: [] },
-    equipped: { weapons: [], powerups: [] },
+    inventory: { weapons: [], powerups: [], animals: [] },
+    equipped: { weapons: [], powerups: [], animals: [] },
     builtItems: [],
     home: { houseBuildId: null, art: [], furniture: [] },
     vehicleBuildId: null,
@@ -403,6 +405,14 @@ io.on('connection', socket => {
     if (patch.lifetimeCred !== undefined) p.lifetimeCred = Math.max(p.lifetimeCred, Math.round(patch.lifetimeCred));
     if (patch.inventory) p.inventory = patch.inventory;
     if (patch.equipped) p.equipped = patch.equipped;
+    if (patch.inventory || patch.equipped) {
+      const requested = p.equipped.animals || [];
+      p.equipped.animals = Animals.equipped(p, catalog).map(a => a.id);
+      if (requested.length !== p.equipped.animals.length) {
+        socket.emit('actionError', { message: 'Equip at most two animals, and only animals you own.' });
+        socket.emit('playerUpdated', publicPlayer(p));
+      }
+    }
     if (patch.builtItems) p.builtItems = patch.builtItems;
     if (patch.home) {
       p.home = patch.home;
@@ -506,15 +516,23 @@ io.on('connection', socket => {
   socket.on('buyItem', ({ itemId, kind }) => {
     const p = db.players[socket.currentPlayerId];
     if (!p) return;
-    const item = kind === 'weapon' ? weaponById[itemId] : powerupById[itemId];
-    if (!item) return;
+    const items = { weapon: weaponById, powerup: powerupById, animal: animalById };
+    const item = Object.hasOwn(items, kind) && Object.hasOwn(items[kind], itemId) && items[kind][itemId];
+    if (!item) {
+      socket.emit('actionError', { message: 'Unknown store item.' });
+      return;
+    }
     if (p.cred < item.cost) {
       socket.emit('actionError', { message: 'Not enough creds.' });
       return;
     }
     p.cred -= item.cost;
     if (kind === 'weapon') p.inventory.weapons.push(itemId);
-    else p.inventory.powerups.push(itemId);
+    else if (kind === 'powerup') p.inventory.powerups.push(itemId);
+    else {
+      p.inventory.animals = p.inventory.animals || [];
+      p.inventory.animals.push(itemId);
+    }
     scheduleSave([p.id]);
     socket.emit('playerUpdated', publicPlayer(p));
   });

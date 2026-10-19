@@ -95,6 +95,7 @@ const Battle = (() => {
     fightBtn.classList.toggle('hitting', !!(fight || team));
     document.getElementById('loadoutStats').innerHTML =
       `⚔ Attack <strong>${stats.attack}</strong> · ❤ Health <strong>${stats.health}</strong> · 🛡 Defense <strong>${stats.defense}</strong>` +
+      `<br>Animals (${stats.animals.length}/2): ${stats.animals.map(a => a.name).join(', ') || 'none'} · +${stats.animalAttack} damage per hit (included above)` +
       `<br>Recommended for this beast: ~${lvl.recommendedPower} attack`;
     if (!fight && !team) {
       setBar('player', stats.health, stats.health);
@@ -222,6 +223,7 @@ const Battle = (() => {
     Net.syncPlayer();
     document.getElementById('battleLog').innerHTML = '';
     log(`${lvl.name} attacks! Click the beast, press Space, or hit the button to strike.`);
+    if (stats.animals.length) log(`${stats.animals.map(a => a.name).join(' and ')} fight beside you, adding ${stats.animalAttack} damage to every hit!`);
     render();
   }
 
@@ -416,6 +418,9 @@ const Battle = (() => {
         facing: 1,
         walkPhase: fight ? Math.sin(t * 6) * 0.4 : 0
       });
+      stats.animals.forEach((animal, i) => {
+        Animals.draw(ctx, animal, px - 65 + i * 100, gy + 8, 0.65, fight ? t * 8 : 0);
+      });
     }
 
     if (fight || team) {
@@ -474,6 +479,9 @@ const Battle = (() => {
         cape: tier.id >= 4,
         facing: 1,
         walkPhase: down ? 0 : Math.sin(t * 6 + i) * 0.4
+      });
+      (m.animals || []).forEach((animal, index) => {
+        Animals.draw(ctx, animal, x - 21 + index * 38, gy + 8, 0.38, down ? 0 : t * 8);
       });
       ctx.globalAlpha = 1;
       const bx = memberX(i) - 28, by = gy - 180;

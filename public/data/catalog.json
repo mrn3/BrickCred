@@ -30,5 +30,13 @@
     { "id": "p_battle_potion","name": "Battle Potion",    "cost": 2000, "attackMult": 1.15, "tierReq": 3 },
     { "id": "p_phoenix",      "name": "Phoenix Charm",    "cost": 5000, "revive": 1,   "tierReq": 4 }
   ],
+  "animals": [
+    { "id": "a_dog",   "name": "Hound",       "cost": 75,    "attack": 4,   "color": "#b77943", "species": "dog" },
+    { "id": "a_wolf",  "name": "Wolf",        "cost": 250,   "attack": 10,  "color": "#94a3b8", "species": "wolf" },
+    { "id": "a_boar",  "name": "Wild Boar",   "cost": 650,   "attack": 20,  "color": "#785240", "species": "boar" },
+    { "id": "a_bear",  "name": "Brown Bear",  "cost": 1600,  "attack": 38,  "color": "#92400e", "species": "bear" },
+    { "id": "a_tiger", "name": "Tiger",       "cost": 4000,  "attack": 65,  "color": "#fb923c", "species": "tiger" },
+    { "id": "a_lion",  "name": "Lion",        "cost": 10000, "attack": 110, "color": "#eab308", "species": "lion" }
+  ],
   "brickColors": ["#ef4444", "#3b82f6", "#22c55e", "#facc15", "#a855f7", "#f97316", "#ffffff", "#111827", "#14b8a6", "#ec4899"]
 }
