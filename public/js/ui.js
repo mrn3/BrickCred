@@ -1,8 +1,26 @@
 const UI = (() => {
-  function showTab(name) {
+  const DEFAULT_TAB = 'world';
+
+  function tabNames() {
+    return [...document.querySelectorAll('.tab-btn')].map(b => b.dataset.tab);
+  }
+
+  function tabFromPath(pathname) {
+    const name = pathname.replace(/^\/+|\/+$/g, '').toLowerCase();
+    return tabNames().includes(name) ? name : DEFAULT_TAB;
+  }
+
+  // history: 'push' (default) adds an entry, 'replace' rewrites the current one, 'none' leaves the URL alone.
+  function showTab(name, { history: mode = 'push' } = {}) {
     document.querySelectorAll('.tab-btn').forEach(b => b.classList.toggle('active', b.dataset.tab === name));
     document.querySelectorAll('.tab-panel').forEach(p => p.classList.toggle('active', p.id === 'tab-' + name));
     closeMenu();
+    const path = '/' + name;
+    if (mode !== 'none' && window.location.pathname !== path) {
+      const url = path + window.location.search + window.location.hash;
+      if (mode === 'replace') window.history.replaceState({ tab: name }, '', url);
+      else window.history.pushState({ tab: name }, '', url);
+    }
   }
 
   function closeMenu() {
@@ -30,6 +48,16 @@ const UI = (() => {
         showTab(btn.dataset.tab);
       });
     });
+    window.addEventListener('popstate', () => {
+      const name = tabFromPath(window.location.pathname);
+      if (typeof Battle !== 'undefined' && Battle.isFighting() && name !== 'beasthunters') {
+        toast('Finish your fight first!');
+        showTab('beasthunters');
+        return;
+      }
+      showTab(name, { history: 'none' });
+    });
+    showTab(tabFromPath(window.location.pathname), { history: 'replace' });
     document.addEventListener('keydown', event => {
       if (event.key === 'Escape') closeMenu();
     });

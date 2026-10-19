@@ -40,6 +40,10 @@ function isGrassPosition(x, y) {
 app.set('trust proxy', 1);
 app.use('/vendor/three', express.static(path.join(__dirname, 'node_modules', 'three', 'build')));
 app.use(express.static(PUBLIC_DIR));
+const TAB_ROUTES = ['world', 'store', 'build', 'home', 'marketplace', 'beasthunters', 'friends', 'profile'];
+app.get(TAB_ROUTES.map(tab => '/' + tab), (req, res) => {
+  res.sendFile(path.join(PUBLIC_DIR, 'index.html'));
+});
 app.use(express.json({ limit: '10kb' }));
 
 const catalog = JSON.parse(fs.readFileSync(CATALOG_FILE, 'utf8'));
